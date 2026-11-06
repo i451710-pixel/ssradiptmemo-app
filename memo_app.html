@@ -310,12 +310,12 @@ import {
 
 /* ====== Firebase 設定（換成你的） ====== */
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAQdobSQroDNhSWWslrZgy3Y6vMW3Ram5E",
+  authDomain: "firstaidcar.firebaseapp.com",
+  projectId: "firstaidcar",
+  storageBucket: "firstaidcar.firebasestorage.app",
+  messagingSenderId: "1074989986808",
+  appId: "1:1074989986808:web:5f551fe32e9211501d5c0d",
 };
 const EMAIL_DOMAIN = "memo-app.com";
 
@@ -371,7 +371,7 @@ onAuthStateChanged(auth, async (user) => {
   if (user) {
     const loginId = user.email.split('@')[0];
     let isAdmin = false;
-    try { isAdmin = (await getDoc(doc(db, 'admins', loginId))).exists(); } catch(e){}
+    try { isAdmin = (await getDoc(doc(db, 'memo_admins', loginId))).exists(); } catch(e){}
     currentUser = { loginId, uid: user.uid, isAdmin };
     if (isAdmin) await ensureDefaultStatuses();
     startListeners();
@@ -788,7 +788,7 @@ async function loadManageData() {
     getDocs(collection(db,'responsibles')),
     getDocs(collection(db,'reasons')),
     getDocs(collection(db,'statuses')),
-    getDocs(collection(db,'admins'))
+    getDocs(collection(db,'memo_admins'))
   ]);
   manageData.responsibles = r.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0));
   manageData.reasons = re.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0));
@@ -959,12 +959,12 @@ function renderAdminTab(el) {
   $('adminAddBtn').onclick = async () => {
     const id = $('adminIdInput').value.trim();
     if (!/^0\d{6}$/.test(id)) { alert('請輸入 0 開頭的 7 位數字'); return; }
-    await setDoc(doc(db,'admins',id), { createdAt: Date.now() });
+    await setDoc(doc(db,'memo_admins',id), { createdAt: Date.now() });
     await loadManageData(); renderAdminTab(el);
   };
   el.querySelectorAll('[data-del-admin]').forEach(b => b.onclick = async () => {
     if (!confirm('移除此管理員？')) return;
-    await deleteDoc(doc(db,'admins',b.dataset.delAdmin));
+    await deleteDoc(doc(db,'memo_admins',b.dataset.delAdmin));
     await loadManageData(); renderAdminTab(el);
   });
 }
