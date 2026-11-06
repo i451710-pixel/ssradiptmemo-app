@@ -105,6 +105,16 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .historyItem .h-transfer{font-size:13px;color:#c77700;margin-top:6px}
 .historyItem .h-operator{font-size:11px;color:#8e8e93;margin-top:6px}
 
+/* 更新歷史（已刪除狀態） */
+.historyItem.deleted .h-content,
+.historyItem.deleted .h-transfer {
+  text-decoration: line-through;
+  color: #8e8e93 !important;
+}
+.historyItem.deleted .h-status {
+  opacity: 0.5;
+}
+
 /* 提醒彈窗 */
 .alertList{display:flex;flex-direction:column;gap:10px}
 .alertItem{background:#fff;border-radius:12px;padding:12px;border-left:3px solid #ff9500;cursor:pointer}
@@ -149,9 +159,9 @@ input,textarea,select{font-family:inherit;font-size:16px}
   .modal{align-items:center}
   .sheet{max-width:600px;max-height:85vh;border-radius:16px;animation:none}
 
-  #manageView,#trashView{background:#f5f5f7}
-  #manageView .body,#trashView .body{max-width:800px;margin:0 auto;width:100%}
-  #manageView header h2,#trashView header h2{font-size:18px}
+  #manageView{background:#f5f5f7}
+  #manageView .body{max-width:800px;margin:0 auto;width:100%}
+  #manageView header h2{font-size:18px}
 }
 </style>
 </head>
@@ -196,7 +206,7 @@ input,textarea,select{font-family:inherit;font-size:16px}
       <button id="editorSave" class="act">儲存</button>
     </div>
     <div class="body">
-      <div class="formSection"><label>編號</label><input id="fNo" autocomplete="off"></div>
+      <div class="formSection"><label>編號</label><input id="fNo" type="tel" inputmode="numeric" autocomplete="off" placeholder="00000000"></div>
       <div class="formSection"><label>原因</label><select id="fReason"></select></div>
       <div class="formSection"><label>負責人</label><select id="fResp"></select></div>
       <div class="formSection"><label>詳細經過</label><textarea id="fDetail"></textarea></div>
@@ -211,7 +221,7 @@ input,textarea,select{font-family:inherit;font-size:16px}
   <div class="sheet">
     <div class="sheetHead">
       <button id="updateCancel" class="act plain">取消</button>
-      <h3>新增更新</h3>
+      <h3 id="updateTitle">新增更新</h3>
       <button id="updateSave" class="act">儲存</button>
     </div>
     <div class="body">
@@ -284,17 +294,9 @@ input,textarea,select{font-family:inherit;font-size:16px}
     <button data-tab="reason">原因</button>
     <button data-tab="status">狀態</button>
     <button data-tab="admin">管理員</button>
+    <button data-tab="trash">回收箱</button>
   </div>
   <div class="body" id="manageBody"></div>
-</div>
-
-<!-- 回收箱 -->
-<div id="trashView" class="fullView">
-  <header>
-    <button class="iconBtn" data-back>←</button>
-    <h2>回收箱</h2>
-  </header>
-  <div class="body" id="trashBody"></div>
 </div>
 
 <script type="module">
@@ -308,7 +310,7 @@ import {
   onSnapshot, getDocs, setDoc, getDoc
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
-/* ====== Firebase 設定（換成你的） ====== */
+/* ====== Firebase 設定 ====== */
 const firebaseConfig = {
   apiKey: "AIzaSyAQdobSQroDNhSWWslrZgy3Y6vMW3Ram5E",
   authDomain: "firstaidcar.firebaseapp.com",
@@ -344,6 +346,13 @@ let editingRespId = null, editingReasonId = null, editingStatusId = null;
 let selectedRespColor = COLORS[0];
 let selectedStatusType = 'normal';
 let manageData = { responsibles: [], reasons: [], statuses: [], admins: [] };
+
+/* ====== 編號輸入處理 ====== */
+$('fNo').addEventListener('input', (e) => {
+  let val = e.target.value.replace(/\D/g, '');
+  if (val.length > 8) val = val.slice(-8);
+  e.target.value = val.padStart(8, '0');
+});
 
 /* ====== 登入 ====== */
 const loginInput = $('loginInput');
@@ -385,7 +394,6 @@ onAuthStateChanged(auth, async (user) => {
     $('loginView').style.display = 'flex';
     $('appView').style.display = 'none';
     $('manageView').style.display = 'none';
-    $('trashView').style.display = 'none';
     $('addBtn').style.display = 'none';
     document.querySelectorAll('.modal').forEach(m => m.classList.remove('show'));
   }
@@ -409,7 +417,7 @@ function startListeners() {
   unsubs.push(onSnapshot(collection(db,'memos'), snap => {
     memos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderMemos();
-    if ($('trashView').style.display === 'flex') renderTrash();
+    if ($('manageView').style.display === 'flex' && currentManageTab === 'trash') renderTrashTab($('manageBody'));
     checkReminders();
   }));
   unsubs.push(onSnapshot(collection(db,'responsibles'), snap => {
@@ -559,10 +567,13 @@ function renderDetail() {
     ${actionHtml}
     <div class="historyTitle">更新歷史（${updates.length}）</div>
     ${updates.map(u => `
-      <div class="historyItem">
+      <div class="historyItem ${u.deleted ? 'deleted' : ''}">
         <div class="h-top">
           <span class="h-status ${u.statusType==='closed'?'closed':u.statusType==='transfer'?'transfer':''}">${esc(u.status)}</span>
-          <span class="h-time">${fmtTime(u.createdAt)}</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="h-time">${fmtTime(u.createdAt)}</span>
+            ${isAdmin && !u.deleted ? `<button class="smallBtn" data-edit-upd="${u.id}">編輯</button><button class="smallBtn danger" data-del-upd="${u.id}">刪除</button>` : ''}
+          </div>
         </div>
         <div class="h-content">${esc(u.content)}</div>
         ${u.statusType==='transfer' && u.transferTo ? `<div class="h-transfer">轉介到：${esc(u.transferTo)}</div>` : ''}
@@ -576,6 +587,19 @@ function renderDetail() {
       if (!confirm('清除提醒？')) return;
       await updateDoc(doc(db,'memos',m.id), { reminderDate: '', reminderNote: '', reminderDone: true });
     };
+    
+    // 編輯歷史紀錄
+    $('detailBody').querySelectorAll('[data-edit-upd]').forEach(b => b.onclick = () => {
+      const u = updates.find(x => x.id === b.dataset.editUpd);
+      if (u) openUpdateModal(m, u);
+    });
+    
+    // 刪除歷史紀錄
+    $('detailBody').querySelectorAll('[data-del-upd]').forEach(b => b.onclick = async () => {
+      if (!confirm('確定刪除此筆更新紀錄？（將以橫線標示）')) return;
+      await updateDoc(doc(db,'memos',m.id,'updates',b.dataset.delUpd), { deleted: true });
+      await recalcMemoStatus(m.id);
+    });
   }
 }
 $('detailClose').addEventListener('click', () => {
@@ -583,6 +607,25 @@ $('detailClose').addEventListener('click', () => {
   if (detailUnsub) { detailUnsub(); detailUnsub = null; }
   updates = [];
 });
+
+/* ====== 更新狀態同步 ====== */
+async function recalcMemoStatus(memoId) {
+  const snap = await getDocs(collection(db,'memos',memoId,'updates'));
+  const validUpdates = snap.docs
+    .map(d => ({id: d.id, ...d.data()}))
+    .filter(u => !u.deleted)
+    .sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+  
+  if (validUpdates.length > 0) {
+    const latest = validUpdates[0];
+    await updateDoc(doc(db,'memos',memoId), {
+      currentStatus: latest.status,
+      currentStatusType: latest.statusType || 'normal',
+      currentTransferTo: latest.transferTo || '',
+      updatedAt: latest.createdAt
+    });
+  }
+}
 
 /* ====== 新增/編輯 ====== */
 $('addBtn').addEventListener('click', () => openEditor(null));
@@ -598,7 +641,7 @@ function openEditor(m) {
   fillSelect($('fReason'), reasons.map(r=>r.name), m?.reason);
   fillSelect($('fResp'), responsibles.map(r=>r.name), m?.responsible);
   fillSelect($('fStatus'), statuses.map(s=>s.name), m?.currentStatus);
-  $('fNo').value = m?.no || '';
+  $('fNo').value = m?.no || '00000000';
   $('fDetail').value = m?.detail || '';
   $('fTransfer').value = m?.currentTransferTo || '';
   $('editorStatusSection').style.display = m ? 'none' : 'block';
@@ -614,7 +657,7 @@ $('fStatus').addEventListener('change', () => updateTransferVisibility('fStatus'
 $('editorCancel').addEventListener('click', () => hideModal('editorModal'));
 
 $('editorSave').addEventListener('click', async () => {
-  const no = $('fNo').value.trim();
+  const no = $('fNo').value;
   const reason = $('fReason').value;
   const responsible = $('fResp').value;
   const detail = $('fDetail').value.trim();
@@ -630,6 +673,15 @@ $('editorSave').addEventListener('click', async () => {
         reminderDone: true // 管理員編輯 → 取消提醒
       });
     } else {
+      // 檢查重複編號
+      const dup = memos.find(m => m.no === no);
+      if (dup) {
+        alert('編號重複，已為您跳轉至該備忘');
+        hideModal('editorModal');
+        openDetail(dup.id);
+        return;
+      }
+
       const statusName = $('fStatus').value;
       if (!statusName) { alert('請選擇初始狀態'); return; }
       const statusObj = statuses.find(s => s.name === statusName);
@@ -657,7 +709,8 @@ $('editorSave').addEventListener('click', async () => {
         statusType: statusObj?.type || 'normal',
         transferTo,
         operator: currentUser.loginId,
-        createdAt: now
+        createdAt: now,
+        deleted: false
       });
     }
     hideModal('editorModal');
@@ -665,10 +718,20 @@ $('editorSave').addEventListener('click', async () => {
 });
 
 /* ====== 更新 ====== */
-function openUpdateModal(m) {
-  $('uContent').value = '';
-  fillSelect($('uStatus'), statuses.map(s=>s.name), '');
-  $('uTransfer').value = '';
+function openUpdateModal(m, u = null) {
+  if (u) {
+    $('updateTitle').textContent = '修改更新';
+    $('uContent').value = u.content || '';
+    fillSelect($('uStatus'), statuses.map(s=>s.name), u.status);
+    $('uTransfer').value = u.transferTo || '';
+    $('updateModal').dataset.updateId = u.id;
+  } else {
+    $('updateTitle').textContent = '新增更新';
+    $('uContent').value = '';
+    fillSelect($('uStatus'), statuses.map(s=>s.name), '');
+    $('uTransfer').value = '';
+    $('updateModal').dataset.updateId = '';
+  }
   $('uOperator').textContent = currentUser.loginId;
   updateTransferVisibility('uStatus','uTransferSection');
   $('updateModal').dataset.memoId = m.id;
@@ -679,6 +742,7 @@ $('updateCancel').addEventListener('click', () => hideModal('updateModal'));
 
 $('updateSave').addEventListener('click', async () => {
   const memoId = $('updateModal').dataset.memoId;
+  const updateId = $('updateModal').dataset.updateId;
   const content = $('uContent').value.trim();
   const statusName = $('uStatus').value;
   if (!content) { alert('請填寫跟進內容'); return; }
@@ -691,20 +755,33 @@ $('updateSave').addEventListener('click', async () => {
   }
   const now = Date.now();
   try {
-    await addDoc(collection(db,'memos',memoId,'updates'), {
-      content, status: statusName,
-      statusType: statusObj?.type || 'normal',
-      transferTo,
-      operator: currentUser.loginId,
-      createdAt: now
-    });
-    await updateDoc(doc(db,'memos',memoId), {
-      currentStatus: statusName,
-      currentStatusType: statusObj?.type || 'normal',
-      currentTransferTo: transferTo,
-      updatedAt: now,
-      reminderDone: true // 管理員更新 → 不再提醒
-    });
+    if (updateId) {
+      // 編輯既有的更新
+      await updateDoc(doc(db,'memos',memoId,'updates',updateId), {
+        content, status: statusName,
+        statusType: statusObj?.type || 'normal',
+        transferTo,
+        updatedAt: now
+      });
+      await recalcMemoStatus(memoId);
+    } else {
+      // 新增更新
+      await addDoc(collection(db,'memos',memoId,'updates'), {
+        content, status: statusName,
+        statusType: statusObj?.type || 'normal',
+        transferTo,
+        operator: currentUser.loginId,
+        createdAt: now,
+        deleted: false
+      });
+      await updateDoc(doc(db,'memos',memoId), {
+        currentStatus: statusName,
+        currentStatusType: statusObj?.type || 'normal',
+        currentTransferTo: transferTo,
+        updatedAt: now,
+        reminderDone: true
+      });
+    }
     hideModal('updateModal');
   } catch (e) { alert('儲存失敗：' + e.message); }
 });
@@ -768,9 +845,8 @@ $('alertList').addEventListener('click', e => {
 $('menuBtn').addEventListener('click', () => {
   const isAdmin = currentUser?.isAdmin;
   $('menuBody').innerHTML = `
-    ${isAdmin ? '<button class="menuItem" data-action="manage">管理</button>' : ''}
-    ${isAdmin ? '<button class="menuItem" data-action="trash">回收箱</button>' : ''}
-    <button class="menuItem danger" data-action="logout">登出</button>`;
+    ${isAdmin ? '<button class="menuItem" data-action="manage">⚙️ 管理</button>' : ''}
+    <button class="menuItem danger" data-action="logout">🚪 登出</button>`;
   showModal('menuModal');
 });
 $('menuBody').addEventListener('click', async e => {
@@ -778,7 +854,6 @@ $('menuBody').addEventListener('click', async e => {
   hideModal('menuModal');
   const a = btn.dataset.action;
   if (a === 'manage') openManage();
-  else if (a === 'trash') openTrash();
   else if (a === 'logout') { stopListeners(); await signOut(auth); }
 });
 
@@ -804,7 +879,6 @@ async function openManage() {
 }
 document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click', () => {
   $('manageView').style.display = 'none';
-  $('trashView').style.display = 'none';
 }));
 $('manageTabs').addEventListener('click', e => {
   const btn = e.target.closest('button[data-tab]'); if (!btn) return;
@@ -818,6 +892,7 @@ function renderManage() {
   else if (currentManageTab === 'reason') renderReasonTab(el);
   else if (currentManageTab === 'status') renderStatusTab(el);
   else if (currentManageTab === 'admin') renderAdminTab(el);
+  else if (currentManageTab === 'trash') renderTrashTab(el);
 }
 
 /* 負責人 */
@@ -969,11 +1044,9 @@ function renderAdminTab(el) {
   });
 }
 
-/* ====== 回收箱 ====== */
-function openTrash() { $('trashView').style.display = 'flex'; renderTrash(); }
-function renderTrash() {
+/* 回收箱 (移至管理內) */
+function renderTrashTab(el) {
   const list = memos.filter(m => m.deleted).sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
-  const el = $('trashBody');
   if (list.length === 0) { el.innerHTML = '<div class="empty">回收箱是空的</div>'; return; }
   el.innerHTML = list.map(m => `
     <div class="trashItem">
@@ -986,10 +1059,12 @@ function renderTrash() {
     </div>`).join('');
   el.querySelectorAll('[data-restore]').forEach(b => b.onclick = async () => {
     await updateDoc(doc(db,'memos',b.dataset.restore), { deleted: false });
+    renderTrashTab(el);
   });
   el.querySelectorAll('[data-purge]').forEach(b => b.onclick = async () => {
     if (!confirm('永久刪除後無法復原，確定？')) return;
     await deleteDoc(doc(db,'memos',b.dataset.purge));
+    renderTrashTab(el);
   });
 }
 
