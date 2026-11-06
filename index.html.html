@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>備忘錄</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif;background:#f5f5f7;color:#1c1c1e}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,textarea,select{font-family:inherit;font-size:16px}
+
+/* 登入 */
+#loginView{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;background:#f5f5f7}
+#loginInput{width:200px;height:52px;font-size:22px;text-align:center;letter-spacing:8px;border:1px solid #d1d1d6;border-radius:14px;background:#fff;outline:none}
+#loginBtn{width:52px;height:52px;border-radius:14px;background:#007aff;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center}
+
+/* 主界面 */
+#appView{display:none;min-height:100%;padding-bottom:90px}
+#topBar{position:sticky;top:0;z-index:10;display:flex;gap:8px;padding:12px;background:rgba(245,245,247,.92);backdrop-filter:blur(10px)}
+#searchInput{flex:1;height:40px;padding:0 14px;border-radius:20px;border:1px solid #d1d1d6;background:#fff;outline:none;font-size:14px}
+.iconBtn{width:40px;height:40px;border-radius:20px;background:#fff;border:1px solid #d1d1d6;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+#activeFilters{display:flex;gap:6px;padding:0 12px 8px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;padding:5px 11px;border-radius:14px;background:#e5e5ea;font-size:12px}
+.chip.active{background:#007aff;color:#fff}
+
+/* 列表 */
+#memoList{padding:0 12px;display:flex;flex-direction:column;gap:10px}
+.card{border-radius:14px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer;position:relative}
+.card.closed{background:#e5e5ea!important}
+.card.closed *{color:#8e8e93!important}
+.card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.card-top .no{font-weight:700;font-size:15px}
+.card-top .status{font-size:12px;padding:2px 8px;border-radius:10px;background:rgba(0,0,0,.08)}
+.card-reason{font-size:14px;margin-bottom:3px;font-weight:500}
+.card-resp{font-size:13px;opacity:.85}
+.card-remind{position:absolute;top:10px;right:10px;font-size:14px}
+
+/* FAB */
+#addBtn{position:fixed;right:18px;bottom:24px;width:56px;height:56px;border-radius:28px;background:#007aff;color:#fff;font-size:28px;box-shadow:0 4px 12px rgba(0,122,255,.4);display:none;align-items:center;justify-content:center;z-index:20}
+
+/* 全屏頁 */
+.fullView{position:fixed;inset:0;background:#f5f5f7;display:none;flex-direction:column;z-index:30}
+.fullView header{display:flex;align-items:center;gap:10px;padding:12px;background:#fff;border-bottom:1px solid #e5e5ea}
+.fullView header h2{margin:0;font-size:17px;flex:1}
+.fullView .body{flex:1;overflow-y:auto;padding:12px}
+.tabs{display:flex;gap:6px;padding:10px 12px;background:#fff;border-bottom:1px solid #e5e5ea;overflow-x:auto}
+.tabs button{padding:6px 14px;border-radius:16px;background:#f0f0f3;font-size:14px;white-space:nowrap}
+.tabs button.active{background:#007aff;color:#fff}
+
+/* 管理項目 */
+.manageItem{display:flex;align-items:center;gap:10px;padding:12px;background:#fff;border-radius:12px;margin-bottom:8px}
+.colorDot{width:22px;height:22px;border-radius:11px;flex-shrink:0;border:1px solid rgba(0,0,0,.1)}
+.manageItem .name{flex:1;font-size:14px}
+.smallBtn{padding:6px 12px;border-radius:14px;background:#f0f0f3;font-size:13px;white-space:nowrap}
+.smallBtn.danger{color:#ff3b30}
+.smallBtn.primary{background:#007aff;color:#fff}
+
+/* 表單 */
+.formSection{background:#fff;border-radius:12px;padding:14px;margin-bottom:12px}
+.formSection label{display:block;font-size:13px;color:#8e8e93;margin-bottom:6px}
+.formSection input,.formSection textarea,.formSection select{width:100%;padding:10px;border:1px solid #d1d1d6;border-radius:8px;outline:none;background:#fff;font-size:15px}
+.formSection textarea{min-height:90px;resize:vertical}
+
+/* 彈窗 */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;z-index:50;align-items:flex-end;justify-content:center}
+.modal.show{display:flex}
+.sheet{background:#f5f5f7;width:100%;max-height:92vh;border-radius:16px 16px 0 0;display:flex;flex-direction:column;animation:slideUp .2s ease}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.sheetHead{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:#fff;border-radius:16px 16px 0 0;border-bottom:1px solid #e5e5ea;flex-shrink:0}
+.sheetHead h3{margin:0;font-size:16px;flex:1;text-align:center}
+.sheetHead .act{font-size:14px;color:#007aff;font-weight:600;padding:4px 0}
+.sheetHead .act.danger{color:#ff3b30}
+.sheetHead .act.plain{color:#1c1c1e;font-weight:400}
+.sheet .body{flex:1;overflow-y:auto;padding:12px}
+
+/* 詳情 */
+.detailRow{margin-bottom:12px}
+.detailRow .k{font-size:12px;color:#8e8e93;margin-bottom:2px}
+.detailRow .v{font-size:15px;white-space:pre-wrap;word-break:break-word;line-height:1.5}
+.dotInline{display:inline-block;width:12px;height:12px;border-radius:6px;vertical-align:-1px;margin-right:6px;border:1px solid rgba(0,0,0,.1)}
+
+/* 提醒列 */
+.reminderRow{background:#fff3e0;border-radius:12px;padding:12px;margin-bottom:12px;border:1px solid #ffe0b2}
+.reminderRow .r-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.reminderRow .r-label{font-size:12px;color:#c77700;font-weight:600}
+.reminderRow .r-clear{font-size:12px;color:#ff3b30}
+.reminderRow .r-date{font-size:15px;font-weight:600;color:#c77700;margin-bottom:2px}
+.reminderRow .r-note{font-size:14px;color:#7a4a00;line-height:1.4}
+
+/* 操作按鈕 */
+.actionRow{display:flex;gap:8px;margin-bottom:14px}
+.actionBtn{flex:1;padding:12px;border-radius:12px;background:#007aff;color:#fff;font-size:14px;font-weight:600;text-align:center}
+.actionBtn.ghost{background:#fff;color:#007aff;border:1px solid #007aff}
+
+/* 更新歷史 */
+.historyTitle{font-size:13px;color:#8e8e93;margin:12px 2px 8px;font-weight:500}
+.historyItem{background:#fff;border-radius:12px;padding:12px;margin-bottom:8px}
+.historyItem .h-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.historyItem .h-status{font-size:11px;padding:2px 8px;border-radius:10px;background:#e5f0ff;color:#007aff;font-weight:600}
+.historyItem .h-status.closed{background:#e5e5ea;color:#8e8e93}
+.historyItem .h-status.transfer{background:#fff3e0;color:#c77700}
+.historyItem .h-time{font-size:11px;color:#8e8e93}
+.historyItem .h-content{font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+.historyItem .h-transfer{font-size:13px;color:#c77700;margin-top:6px}
+.historyItem .h-operator{font-size:11px;color:#8e8e93;margin-top:6px}
+
+/* 提醒彈窗 */
+.alertList{display:flex;flex-direction:column;gap:10px}
+.alertItem{background:#fff;border-radius:12px;padding:12px;border-left:3px solid #ff9500;cursor:pointer}
+.alertItem .a-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.alertItem .a-no{font-weight:700;font-size:14px}
+.alertItem .a-date{font-size:11px;color:#ff9500;font-weight:600}
+.alertItem .a-reason{font-size:14px;margin-bottom:4px;font-weight:500}
+.alertItem .a-note{font-size:13px;color:#c77700;background:#fff3e0;padding:6px 9px;border-radius:8px;margin:6px 0;line-height:1.4}
+.alertItem .a-resp{font-size:12px;color:#8e8e93}
+
+/* 篩選 */
+.filterGroup{margin-bottom:16px}
+.filterGroup h4{margin:0 0 8px;font-size:13px;color:#8e8e93;font-weight:500}
+.filterChips{display:flex;flex-wrap:wrap;gap:8px}
+
+/* 色板 */
+.palette{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.palette button{width:32px;height:32px;border-radius:16px;border:2px solid transparent;padding:0}
+.palette button.selected{border-color:#007aff}
+
+/* 空狀態 */
+.empty{text-align:center;color:#8e8e93;padding:40px 0;font-size:14px}
+
+/* 選單 */
+.menuItem{display:block;width:100%;padding:16px;font-size:16px;text-align:left;background:#fff;border-bottom:1px solid #e5e5ea}
+.menuItem:last-child{border-bottom:none}
+.menuItem.danger{color:#ff3b30}
+
+/* 回收箱 */
+.trashItem{background:#fff;border-radius:12px;padding:12px;margin-bottom:8px;font-size:14px}
+.trashItem .line{color:#8e8e93;margin:6px 0;line-height:1.4}
+.trashItem .btns{display:flex;gap:8px;margin-top:8px}
+
+/* 電腦響應式 */
+@media (min-width: 768px) {
+  #memoList{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;padding:0 24px}
+  #topBar{padding:12px 24px}
+  #activeFilters{padding:0 24px 8px}
+  #appView{padding-bottom:40px}
+  #addBtn{right:32px;bottom:32px}
+
+  .modal{align-items:center}
+  .sheet{max-width:600px;max-height:85vh;border-radius:16px;animation:none}
+
+  #manageView,#trashView{background:#f5f5f7}
+  #manageView .body,#trashView .body{max-width:800px;margin:0 auto;width:100%}
+  #manageView header h2,#trashView header h2{font-size:18px}
+}
+</style>
+</head>
+<body>
+
+<!-- 登入 -->
+<div id="loginView">
+  <input id="loginInput" type="text" inputmode="numeric" autocomplete="off">
+  <button id="loginBtn">→</button>
+</div>
+
+<!-- 主界面 -->
+<div id="appView">
+  <div id="topBar">
+    <input id="searchInput" placeholder="搜尋編號／原因／負責人">
+    <button class="iconBtn" id="filterBtn">☰</button>
+    <button class="iconBtn" id="menuBtn">⋯</button>
+  </div>
+  <div id="activeFilters"></div>
+  <div id="memoList"></div>
+  <button id="addBtn">＋</button>
+</div>
+
+<!-- 詳情彈窗 -->
+<div id="detailModal" class="modal">
+  <div class="sheet">
+    <div class="sheetHead">
+      <button id="detailClose" class="act plain">關閉</button>
+      <h3>詳情</h3>
+      <div id="detailActions" style="display:flex;gap:10px"></div>
+    </div>
+    <div class="body" id="detailBody"></div>
+  </div>
+</div>
+
+<!-- 新增/編輯彈窗 -->
+<div id="editorModal" class="modal">
+  <div class="sheet">
+    <div class="sheetHead">
+      <button id="editorCancel" class="act plain">取消</button>
+      <h3 id="editorTitle">新增備忘</h3>
+      <button id="editorSave" class="act">儲存</button>
+    </div>
+    <div class="body">
+      <div class="formSection"><label>編號</label><input id="fNo" autocomplete="off"></div>
+      <div class="formSection"><label>原因</label><select id="fReason"></select></div>
+      <div class="formSection"><label>負責人</label><select id="fResp"></select></div>
+      <div class="formSection"><label>詳細經過</label><textarea id="fDetail"></textarea></div>
+      <div class="formSection" id="editorStatusSection"><label>初始狀態</label><select id="fStatus"></select></div>
+      <div class="formSection" id="transferSection" style="display:none"><label>轉介到</label><input id="fTransfer" autocomplete="off"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 更新彈窗 -->
+<div id="updateModal" class="modal">
+  <div class="sheet">
+    <div class="sheetHead">
+      <button id="updateCancel" class="act plain">取消</button>
+      <h3>新增更新</h3>
+      <button id="updateSave" class="act">儲存</button>
+    </div>
+    <div class="body">
+      <div class="formSection"><label>最新跟進內容</label><textarea id="uContent" placeholder="輸入本次跟進內容…"></textarea></div>
+      <div class="formSection"><label>狀態</label><select id="uStatus"></select></div>
+      <div class="formSection" id="uTransferSection" style="display:none"><label>轉介到</label><input id="uTransfer" autocomplete="off"></div>
+      <div style="font-size:12px;color:#8e8e93;padding:4px 4px">操作者：<span id="uOperator"></span>　時間自動記錄</div>
+    </div>
+  </div>
+</div>
+
+<!-- 提醒日期彈窗 -->
+<div id="reminderModal" class="modal">
+  <div class="sheet">
+    <div class="sheetHead">
+      <button id="reminderCancel" class="act plain">取消</button>
+      <h3>設定提醒日期</h3>
+      <button id="reminderSave" class="act">確定</button>
+    </div>
+    <div class="body">
+      <div class="formSection"><label>提醒日期</label><input id="rDate" type="date"></div>
+      <div class="formSection"><label>提醒內容（選填，提示為甚麼提醒）</label><textarea id="rNote" placeholder="例如：檢查維修進度"></textarea></div>
+      <div style="font-size:12px;color:#8e8e93;padding:4px 4px;line-height:1.6">到期當天或之後，會提醒所有登入用戶。每位用戶每條提醒只彈一次；若管理員之後更新此備忘，則不再提醒其他用戶。</div>
+    </div>
+  </div>
+</div>
+
+<!-- 提醒彈窗 -->
+<div id="alertModal" class="modal">
+  <div class="sheet">
+    <div class="sheetHead">
+      <button id="alertClose" class="act plain">關閉</button>
+      <h3>🔔 到期提醒</h3>
+      <span style="width:50px"></span>
+    </div>
+    <div class="body">
+      <div class="alertList" id="alertList"></div>
+      <div style="font-size:12px;color:#8e8e93;text-align:center;margin-top:14px">點擊任一項可查看詳情</div>
+    </div>
+  </div>
+</div>
+
+<!-- 篩選彈窗 -->
+<div id="filterModal" class="modal">
+  <div class="sheet">
+    <div class="sheetHead">
+      <button id="filterClear" class="act plain">清除</button>
+      <h3>篩選</h3>
+      <button id="filterDone" class="act">完成</button>
+    </div>
+    <div class="body" id="filterBody"></div>
+  </div>
+</div>
+
+<!-- 選單 -->
+<div id="menuModal" class="modal">
+  <div class="sheet" style="max-height:auto">
+    <div class="body" id="menuBody" style="padding:0"></div>
+  </div>
+</div>
+
+<!-- 管理 -->
+<div id="manageView" class="fullView">
+  <header>
+    <button class="iconBtn" data-back>←</button>
+    <h2>管理</h2>
+  </header>
+  <div class="tabs" id="manageTabs">
+    <button data-tab="resp" class="active">負責人</button>
+    <button data-tab="reason">原因</button>
+    <button data-tab="status">狀態</button>
+    <button data-tab="admin">管理員</button>
+  </div>
+  <div class="body" id="manageBody"></div>
+</div>
+
+<!-- 回收箱 -->
+<div id="trashView" class="fullView">
+  <header>
+    <button class="iconBtn" data-back>←</button>
+    <h2>回收箱</h2>
+  </header>
+  <div class="body" id="trashBody"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import {
+  getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import {
+  getFirestore, collection, doc, addDoc, updateDoc, deleteDoc,
+  onSnapshot, getDocs, setDoc, getDoc
+} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+
+/* ====== Firebase 設定（換成你的） ====== */
+const firebaseConfig = {
+  apiKey: "AIzaSyAQdobSQroDNhSWWslrZgy3Y6vMW3Ram5E",
+  authDomain: "firstaidcar.firebaseapp.com",
+  projectId: "firstaidcar",
+  storageBucket: "firstaidcar.firebasestorage.app",
+  messagingSenderId: "1074989986808",
+  appId: "1:1074989986808:web:5f551fe32e9211501d5c0d",
+};
+const EMAIL_DOMAIN = "memo-app.com";
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+/* ====== 工具 ====== */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const todayStr = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+const fmtTime = ts => { if (!ts) return ''; const d = new Date(ts); return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
+
+/* ====== 狀態 ====== */
+const COLORS = ['#FFB3BA','#FFDFBA','#FDFFB6','#CAFFBF','#9BF6FF','#A0C4FF','#BDB2FF','#FFC6FF','#FFD6A5','#E4C1F9','#B5EAD7','#FF9AA2'];
+let currentUser = null;
+let unsubs = [];
+let memos = [], responsibles = [], reasons = [], statuses = [];
+let filterState = { search:'', resp:'', reason:'', status:'' };
+let editingMemoId = null;
+let detailMemoId = null;
+let detailUnsub = null;
+let updates = [];
+let currentManageTab = 'resp';
+let editingRespId = null, editingReasonId = null, editingStatusId = null;
+let selectedRespColor = COLORS[0];
+let selectedStatusType = 'normal';
+let manageData = { responsibles: [], reasons: [], statuses: [], admins: [] };
+
+/* ====== 登入 ====== */
+const loginInput = $('loginInput');
+loginInput.addEventListener('keydown', e => { if (e.key === 'Enter') tryLogin(); });
+$('loginBtn').addEventListener('click', tryLogin);
+
+function tryLogin() {
+  const v = loginInput.value;
+  loginInput.value = '';
+  if (!/^0\d{6}$/.test(v)) return;
+  doLogin(v);
+}
+
+async function doLogin(id) {
+  const email = `${id}@${EMAIL_DOMAIN}`;
+  try {
+    await signInWithEmailAndPassword(auth, email, id);
+  } catch (e) {
+    try { await createUserWithEmailAndPassword(auth, email, id); }
+    catch (e2) { /* 靜默 */ }
+  }
+}
+
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    const loginId = user.email.split('@')[0];
+    let isAdmin = false;
+    try { isAdmin = (await getDoc(doc(db, 'memo_admins', loginId))).exists(); } catch(e){}
+    currentUser = { loginId, uid: user.uid, isAdmin };
+    if (isAdmin) await ensureDefaultStatuses();
+    startListeners();
+    $('loginView').style.display = 'none';
+    $('appView').style.display = 'block';
+    $('addBtn').style.display = isAdmin ? 'flex' : 'none';
+  } else {
+    currentUser = null;
+    stopListeners();
+    memos = []; responsibles = []; reasons = []; statuses = []; updates = [];
+    $('loginView').style.display = 'flex';
+    $('appView').style.display = 'none';
+    $('manageView').style.display = 'none';
+    $('trashView').style.display = 'none';
+    $('addBtn').style.display = 'none';
+    document.querySelectorAll('.modal').forEach(m => m.classList.remove('show'));
+  }
+});
+
+async function ensureDefaultStatuses() {
+  try {
+    const snap = await getDocs(collection(db, 'statuses'));
+    if (!snap.empty) return;
+    await Promise.all([
+      setDoc(doc(db,'statuses','_in_progress'), { name:'進行中', type:'normal', order:0 }),
+      setDoc(doc(db,'statuses','_transfer'),    { name:'轉介',  type:'transfer', order:1 }),
+      setDoc(doc(db,'statuses','_closed'),      { name:'完結',  type:'closed', order:2 })
+    ]);
+  } catch(e){ console.error(e); }
+}
+
+/* ====== 監聽 ====== */
+function startListeners() {
+  stopListeners();
+  unsubs.push(onSnapshot(collection(db,'memos'), snap => {
+    memos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderMemos();
+    if ($('trashView').style.display === 'flex') renderTrash();
+    checkReminders();
+  }));
+  unsubs.push(onSnapshot(collection(db,'responsibles'), snap => {
+    responsibles = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0));
+    renderActiveFilters();
+  }));
+  unsubs.push(onSnapshot(collection(db,'reasons'), snap => {
+    reasons = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0));
+    renderActiveFilters();
+  }));
+  unsubs.push(onSnapshot(collection(db,'statuses'), snap => {
+    statuses = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0));
+    renderActiveFilters();
+  }));
+}
+function stopListeners() { unsubs.forEach(u => { try{u();}catch(e){} }); unsubs = []; }
+
+/* ====== 列表 ====== */
+function getFilteredMemos() {
+  return memos
+    .filter(m => !m.deleted)
+    .filter(m => {
+      if (filterState.resp && m.responsible !== filterState.resp) return false;
+      if (filterState.reason && m.reason !== filterState.reason) return false;
+      if (filterState.status && m.currentStatus !== filterState.status) return false;
+      if (filterState.search) {
+        const s = filterState.search.toLowerCase();
+        const text = `${m.no||''} ${m.reason||''} ${m.responsible||''}`.toLowerCase();
+        if (!text.includes(s)) return false;
+      }
+      return true;
+    })
+    .sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+}
+
+function renderMemos() {
+  const list = getFilteredMemos();
+  const el = $('memoList');
+  if (list.length === 0) { el.innerHTML = '<div class="empty">沒有備忘</div>'; return; }
+  el.innerHTML = list.map(m => {
+    const closed = m.currentStatusType === 'closed';
+    const bg = closed ? '#e5e5ea' : (m.responsibleColor || '#f0f0f0');
+    const hasRemind = m.reminderDate && !m.reminderDone;
+    return `<div class="card ${closed?'closed':''}" data-id="${m.id}" style="background:${bg}">
+      <div class="card-top">
+        <span class="no">#${esc(m.no)}</span>
+        <span class="status">${esc(m.currentStatus||'')}</span>
+      </div>
+      <div class="card-reason">${esc(m.reason)}</div>
+      <div class="card-resp">負責人：${esc(m.responsible)}</div>
+      ${hasRemind ? '<span class="card-remind">🔔</span>' : ''}
+    </div>`;
+  }).join('');
+}
+$('memoList').addEventListener('click', e => {
+  const card = e.target.closest('.card'); if (!card) return;
+  openDetail(card.dataset.id);
+});
+
+/* ====== 搜尋 / 篩選 ====== */
+$('searchInput').addEventListener('input', () => {
+  filterState.search = $('searchInput').value.trim();
+  renderMemos(); renderActiveFilters();
+});
+$('filterBtn').addEventListener('click', () => { renderFilterBody(); showModal('filterModal'); });
+$('filterDone').addEventListener('click', () => hideModal('filterModal'));
+$('filterClear').addEventListener('click', () => {
+  filterState.resp = ''; filterState.reason = ''; filterState.status = '';
+  renderFilterBody(); renderMemos(); renderActiveFilters();
+});
+
+function renderFilterBody() {
+  const mk = (title, key, items) => `
+    <div class="filterGroup"><h4>${title}</h4><div class="filterChips">
+      <button class="chip ${!filterState[key]?'active':''}" data-f="${key}" data-v="">全部</button>
+      ${items.map(v => `<button class="chip ${filterState[key]===v?'active':''}" data-f="${key}" data-v="${esc(v)}">${esc(v)}</button>`).join('')}
+    </div></div>`;
+  $('filterBody').innerHTML =
+    mk('負責人','resp', responsibles.map(r=>r.name)) +
+    mk('原因','reason', reasons.map(r=>r.name)) +
+    mk('狀態（依最新狀態）','status', statuses.map(s=>s.name));
+}
+$('filterBody').addEventListener('click', e => {
+  const btn = e.target.closest('.chip'); if (!btn) return;
+  const f = btn.dataset.f, v = btn.dataset.v;
+  filterState[f] = (filterState[f] === v) ? '' : v;
+  renderFilterBody(); renderMemos(); renderActiveFilters();
+});
+
+function renderActiveFilters() {
+  const parts = [];
+  if (filterState.resp) parts.push(`<span class="chip active">負責人：${esc(filterState.resp)}</span>`);
+  if (filterState.reason) parts.push(`<span class="chip active">原因：${esc(filterState.reason)}</span>`);
+  if (filterState.status) parts.push(`<span class="chip active">狀態：${esc(filterState.status)}</span>`);
+  $('activeFilters').innerHTML = parts.join('');
+}
+
+/* ====== 詳情 ====== */
+function openDetail(id) {
+  detailMemoId = id;
+  if (detailUnsub) detailUnsub();
+  detailUnsub = onSnapshot(collection(db,'memos',id,'updates'), snap => {
+    updates = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    renderDetail();
+  });
+  showModal('detailModal');
+}
+
+function renderDetail() {
+  const m = memos.find(x => x.id === detailMemoId);
+  if (!m) { hideModal('detailModal'); return; }
+  const isAdmin = currentUser?.isAdmin;
+  $('detailActions').innerHTML = isAdmin
+    ? `<button class="act" id="detailEdit">編輯</button><button class="act danger" id="detailDelete">刪除</button>`
+    : '';
+  if (isAdmin) {
+    $('detailEdit').onclick = () => { hideModal('detailModal'); openEditor(m); };
+    $('detailDelete').onclick = async () => {
+      if (!confirm('確定移到回收箱？')) return;
+      await updateDoc(doc(db,'memos',m.id), { deleted: true, deletedAt: Date.now() });
+      hideModal('detailModal');
+    };
+  }
+  const hasRemind = m.reminderDate && !m.reminderDone;
+  const reminderHtml = (m.reminderDate && !m.reminderDone) ? `
+    <div class="reminderRow">
+      <div class="r-top"><span class="r-label">🔔 提醒</span>${isAdmin?'<span class="r-clear" id="reminderClear">清除</span>':''}</div>
+      <div class="r-date">${esc(m.reminderDate)}</div>
+      ${m.reminderNote ? `<div class="r-note">${esc(m.reminderNote)}</div>` : ''}
+    </div>` : '';
+
+  const actionHtml = isAdmin ? `
+    <div class="actionRow">
+      <div class="actionBtn" id="btnUpdate">＋ 更新</div>
+      <div class="actionBtn ghost" id="btnReminder">📅 提醒日期</div>
+    </div>` : '';
+
+  $('detailBody').innerHTML = `
+    <div class="formSection">
+      <div class="detailRow"><div class="k">編號</div><div class="v">#${esc(m.no)}</div></div>
+      <div class="detailRow"><div class="k">原因</div><div class="v">${esc(m.reason)}</div></div>
+      <div class="detailRow"><div class="k">負責人</div><div class="v"><span class="dotInline" style="background:${esc(m.responsibleColor||'#eee')}"></span>${esc(m.responsible)}</div></div>
+      <div class="detailRow"><div class="k">詳細經過</div><div class="v">${esc(m.detail)}</div></div>
+      <div class="detailRow"><div class="k">建立時間</div><div class="v">${fmtTime(m.createdAt)}</div></div>
+    </div>
+    ${reminderHtml}
+    ${actionHtml}
+    <div class="historyTitle">更新歷史（${updates.length}）</div>
+    ${updates.map(u => `
+      <div class="historyItem">
+        <div class="h-top">
+          <span class="h-status ${u.statusType==='closed'?'closed':u.statusType==='transfer'?'transfer':''}">${esc(u.status)}</span>
+          <span class="h-time">${fmtTime(u.createdAt)}</span>
+        </div>
+        <div class="h-content">${esc(u.content)}</div>
+        ${u.statusType==='transfer' && u.transferTo ? `<div class="h-transfer">轉介到：${esc(u.transferTo)}</div>` : ''}
+        <div class="h-operator">操作者：${esc(u.operator)}</div>
+      </div>`).join('')}
+  `;
+  if (isAdmin) {
+    $('btnUpdate').onclick = () => openUpdateModal(m);
+    $('btnReminder').onclick = () => openReminderModal(m);
+    if ($('reminderClear')) $('reminderClear').onclick = async () => {
+      if (!confirm('清除提醒？')) return;
+      await updateDoc(doc(db,'memos',m.id), { reminderDate: '', reminderNote: '', reminderDone: true });
+    };
+  }
+}
+$('detailClose').addEventListener('click', () => {
+  hideModal('detailModal');
+  if (detailUnsub) { detailUnsub(); detailUnsub = null; }
+  updates = [];
+});
+
+/* ====== 新增/編輯 ====== */
+$('addBtn').addEventListener('click', () => openEditor(null));
+
+function fillSelect(sel, items, value) {
+  sel.innerHTML = '<option value="">請選擇</option>' +
+    items.map(i => `<option value="${esc(i)}" ${i===value?'selected':''}>${esc(i)}</option>`).join('');
+}
+
+function openEditor(m) {
+  editingMemoId = m ? m.id : null;
+  $('editorTitle').textContent = m ? '編輯備忘' : '新增備忘';
+  fillSelect($('fReason'), reasons.map(r=>r.name), m?.reason);
+  fillSelect($('fResp'), responsibles.map(r=>r.name), m?.responsible);
+  fillSelect($('fStatus'), statuses.map(s=>s.name), m?.currentStatus);
+  $('fNo').value = m?.no || '';
+  $('fDetail').value = m?.detail || '';
+  $('fTransfer').value = m?.currentTransferTo || '';
+  $('editorStatusSection').style.display = m ? 'none' : 'block';
+  updateTransferVisibility('fStatus','transferSection');
+  showModal('editorModal');
+}
+
+function updateTransferVisibility(statusId, sectionId) {
+  const s = statuses.find(x => x.name === $(statusId).value);
+  $(sectionId).style.display = (s && s.type === 'transfer') ? 'block' : 'none';
+}
+$('fStatus').addEventListener('change', () => updateTransferVisibility('fStatus','transferSection'));
+$('editorCancel').addEventListener('click', () => hideModal('editorModal'));
+
+$('editorSave').addEventListener('click', async () => {
+  const no = $('fNo').value.trim();
+  const reason = $('fReason').value;
+  const responsible = $('fResp').value;
+  const detail = $('fDetail').value.trim();
+  if (!no || !reason || !responsible || !detail) { alert('請填寫必填欄位'); return; }
+  const respObj = responsibles.find(r => r.name === responsible);
+
+  try {
+    if (editingMemoId) {
+      await updateDoc(doc(db,'memos',editingMemoId), {
+        no, reason, responsible, detail,
+        responsibleColor: respObj?.color || '#f0f0f0',
+        updatedAt: Date.now(),
+        reminderDone: true // 管理員編輯 → 取消提醒
+      });
+    } else {
+      const statusName = $('fStatus').value;
+      if (!statusName) { alert('請選擇初始狀態'); return; }
+      const statusObj = statuses.find(s => s.name === statusName);
+      let transferTo = '';
+      if (statusObj?.type === 'transfer') {
+        transferTo = $('fTransfer').value.trim();
+        if (!transferTo) { alert('請填寫轉介到'); return; }
+      }
+      const now = Date.now();
+      const memoRef = await addDoc(collection(db,'memos'), {
+        no, reason, responsible,
+        responsibleColor: respObj?.color || '#f0f0f0',
+        detail,
+        currentStatus: statusName,
+        currentStatusType: statusObj?.type || 'normal',
+        currentTransferTo: transferTo,
+        createdAt: now, updatedAt: now,
+        deleted: false,
+        reminderDate: '', reminderNote: '', reminderDone: true
+      });
+      // 第一條 update
+      await addDoc(collection(db,'memos',memoRef.id,'updates'), {
+        content: detail,
+        status: statusName,
+        statusType: statusObj?.type || 'normal',
+        transferTo,
+        operator: currentUser.loginId,
+        createdAt: now
+      });
+    }
+    hideModal('editorModal');
+  } catch (e) { alert('儲存失敗：' + e.message); }
+});
+
+/* ====== 更新 ====== */
+function openUpdateModal(m) {
+  $('uContent').value = '';
+  fillSelect($('uStatus'), statuses.map(s=>s.name), '');
+  $('uTransfer').value = '';
+  $('uOperator').textContent = currentUser.loginId;
+  updateTransferVisibility('uStatus','uTransferSection');
+  $('updateModal').dataset.memoId = m.id;
+  showModal('updateModal');
+}
+$('uStatus').addEventListener('change', () => updateTransferVisibility('uStatus','uTransferSection'));
+$('updateCancel').addEventListener('click', () => hideModal('updateModal'));
+
+$('updateSave').addEventListener('click', async () => {
+  const memoId = $('updateModal').dataset.memoId;
+  const content = $('uContent').value.trim();
+  const statusName = $('uStatus').value;
+  if (!content) { alert('請填寫跟進內容'); return; }
+  if (!statusName) { alert('請選擇狀態'); return; }
+  const statusObj = statuses.find(s => s.name === statusName);
+  let transferTo = '';
+  if (statusObj?.type === 'transfer') {
+    transferTo = $('uTransfer').value.trim();
+    if (!transferTo) { alert('請填寫轉介到'); return; }
+  }
+  const now = Date.now();
+  try {
+    await addDoc(collection(db,'memos',memoId,'updates'), {
+      content, status: statusName,
+      statusType: statusObj?.type || 'normal',
+      transferTo,
+      operator: currentUser.loginId,
+      createdAt: now
+    });
+    await updateDoc(doc(db,'memos',memoId), {
+      currentStatus: statusName,
+      currentStatusType: statusObj?.type || 'normal',
+      currentTransferTo: transferTo,
+      updatedAt: now,
+      reminderDone: true // 管理員更新 → 不再提醒
+    });
+    hideModal('updateModal');
+  } catch (e) { alert('儲存失敗：' + e.message); }
+});
+
+/* ====== 提醒設定 ====== */
+function openReminderModal(m) {
+  $('rDate').value = m.reminderDate || '';
+  $('rNote').value = m.reminderNote || '';
+  $('reminderModal').dataset.memoId = m.id;
+  showModal('reminderModal');
+}
+$('reminderCancel').addEventListener('click', () => hideModal('reminderModal'));
+$('reminderSave').addEventListener('click', async () => {
+  const memoId = $('reminderModal').dataset.memoId;
+  const date = $('rDate').value;
+  const note = $('rNote').value.trim();
+  if (!date) { alert('請選擇提醒日期'); return; }
+  try {
+    await updateDoc(doc(db,'memos',memoId), {
+      reminderDate: date, reminderNote: note, reminderDone: false
+    });
+    hideModal('reminderModal');
+  } catch (e) { alert('儲存失敗：' + e.message); }
+});
+
+/* ====== 提醒檢查 ====== */
+function getReminded() { try { return JSON.parse(localStorage.getItem('reminded')||'{}'); } catch { return {}; } }
+function setReminded(k) { const r = getReminded(); r[k] = 1; localStorage.setItem('reminded', JSON.stringify(r)); }
+
+function checkReminders() {
+  if (!currentUser) return;
+  const today = todayStr();
+  const reminded = getReminded();
+  const due = memos.filter(m =>
+    !m.deleted && m.reminderDate && !m.reminderDone &&
+    m.reminderDate <= today &&
+    !reminded[m.id + '_' + m.reminderDate]
+  );
+  if (due.length === 0) return;
+  $('alertList').innerHTML = due.map(m => `
+    <div class="alertItem" data-id="${m.id}">
+      <div class="a-top">
+        <span class="a-no">#${esc(m.no)}</span>
+        <span class="a-date">${m.reminderDate < today ? '已過期' : '到期'} ${esc(m.reminderDate.slice(5))}</span>
+      </div>
+      <div class="a-reason">${esc(m.reason)}</div>
+      ${m.reminderNote ? `<div class="a-note">${esc(m.reminderNote)}</div>` : ''}
+      <div class="a-resp">負責人：${esc(m.responsible)} · 狀態：${esc(m.currentStatus||'')}</div>
+    </div>`).join('');
+  due.forEach(m => setReminded(m.id + '_' + m.reminderDate));
+  showModal('alertModal');
+}
+$('alertClose').addEventListener('click', () => hideModal('alertModal'));
+$('alertList').addEventListener('click', e => {
+  const item = e.target.closest('.alertItem'); if (!item) return;
+  hideModal('alertModal');
+  openDetail(item.dataset.id);
+});
+
+/* ====== 選單 ====== */
+$('menuBtn').addEventListener('click', () => {
+  const isAdmin = currentUser?.isAdmin;
+  $('menuBody').innerHTML = `
+    ${isAdmin ? '<button class="menuItem" data-action="manage">管理</button>' : ''}
+    ${isAdmin ? '<button class="menuItem" data-action="trash">回收箱</button>' : ''}
+    <button class="menuItem danger" data-action="logout">登出</button>`;
+  showModal('menuModal');
+});
+$('menuBody').addEventListener('click', async e => {
+  const btn = e.target.closest('.menuItem'); if (!btn) return;
+  hideModal('menuModal');
+  const a = btn.dataset.action;
+  if (a === 'manage') openManage();
+  else if (a === 'trash') openTrash();
+  else if (a === 'logout') { stopListeners(); await signOut(auth); }
+});
+
+/* ====== 管理 ====== */
+async function loadManageData() {
+  const [r, re, s, a] = await Promise.all([
+    getDocs(collection(db,'responsibles')),
+    getDocs(collection(db,'reasons')),
+    getDocs(collection(db,'statuses')),
+    getDocs(collection(db,'memo_admins'))
+  ]);
+  manageData.responsibles = r.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0));
+  manageData.reasons = re.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0));
+  manageData.statuses = s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0));
+  manageData.admins = a.docs.map(d=>({id:d.id,...d.data()}));
+}
+async function openManage() {
+  await loadManageData();
+  editingRespId = null; editingReasonId = null; editingStatusId = null;
+  selectedRespColor = COLORS[0]; selectedStatusType = 'normal';
+  $('manageView').style.display = 'flex';
+  renderManage();
+}
+document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click', () => {
+  $('manageView').style.display = 'none';
+  $('trashView').style.display = 'none';
+}));
+$('manageTabs').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-tab]'); if (!btn) return;
+  currentManageTab = btn.dataset.tab;
+  document.querySelectorAll('#manageTabs button').forEach(b => b.classList.toggle('active', b===btn));
+  renderManage();
+});
+function renderManage() {
+  const el = $('manageBody');
+  if (currentManageTab === 'resp') renderRespTab(el);
+  else if (currentManageTab === 'reason') renderReasonTab(el);
+  else if (currentManageTab === 'status') renderStatusTab(el);
+  else if (currentManageTab === 'admin') renderAdminTab(el);
+}
+
+/* 負責人 */
+function renderRespTab(el) {
+  const editing = editingRespId ? manageData.responsibles.find(r=>r.id===editingRespId) : null;
+  if (editing) selectedRespColor = editing.color;
+  el.innerHTML = `
+    <div class="manageItem" style="flex-direction:column;align-items:stretch;gap:8px">
+      <input id="respNameInput" placeholder="負責人名稱" style="padding:10px;border:1px solid #d1d1d6;border-radius:8px" value="${esc(editing?.name||'')}">
+      <div class="palette" id="respPalette">
+        ${COLORS.map(c=>`<button data-color="${c}" class="${c===selectedRespColor?'selected':''}" style="background:${c}"></button>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="smallBtn primary" id="respSaveBtn">${editing?'更新':'新增'}</button>
+        ${editing?'<button class="smallBtn" id="respCancelBtn">取消</button>':''}
+      </div>
+    </div>
+    ${manageData.responsibles.map(r => `
+      <div class="manageItem">
+        <span class="colorDot" style="background:${esc(r.color)}"></span>
+        <span class="name">${esc(r.name)}</span>
+        <button class="smallBtn" data-edit-resp="${r.id}">編輯</button>
+        <button class="smallBtn danger" data-del-resp="${r.id}">刪除</button>
+      </div>`).join('')}
+  `;
+  $('respPalette').onclick = e => {
+    const b = e.target.closest('button[data-color]'); if (!b) return;
+    selectedRespColor = b.dataset.color;
+    $('respPalette').querySelectorAll('button').forEach(x => x.classList.toggle('selected', x===b));
+  };
+  $('respSaveBtn').onclick = async () => {
+    const name = $('respNameInput').value.trim(); if (!name) return;
+    if (editing) await updateDoc(doc(db,'responsibles',editing.id), { name, color: selectedRespColor });
+    else await addDoc(collection(db,'responsibles'), { name, color: selectedRespColor, order: manageData.responsibles.length });
+    editingRespId = null; selectedRespColor = COLORS[0];
+    await loadManageData(); renderRespTab(el);
+  };
+  if (editing) $('respCancelBtn').onclick = () => { editingRespId = null; selectedRespColor = COLORS[0]; renderRespTab(el); };
+  el.querySelectorAll('[data-edit-resp]').forEach(b => b.onclick = () => { editingRespId = b.dataset.editResp; renderRespTab(el); });
+  el.querySelectorAll('[data-del-resp]').forEach(b => b.onclick = async () => {
+    if (!confirm('刪除此負責人？（以往記錄不受影響）')) return;
+    await deleteDoc(doc(db,'responsibles',b.dataset.delResp));
+    if (editingRespId === b.dataset.delResp) editingRespId = null;
+    await loadManageData(); renderRespTab(el);
+  });
+}
+
+/* 原因 */
+function renderReasonTab(el) {
+  const editing = editingReasonId ? manageData.reasons.find(r=>r.id===editingReasonId) : null;
+  el.innerHTML = `
+    <div class="manageItem" style="flex-direction:column;align-items:stretch;gap:8px">
+      <input id="reasonNameInput" placeholder="原因名稱" style="padding:10px;border:1px solid #d1d1d6;border-radius:8px" value="${esc(editing?.name||'')}">
+      <div style="display:flex;gap:8px">
+        <button class="smallBtn primary" id="reasonSaveBtn">${editing?'更新':'新增'}</button>
+        ${editing?'<button class="smallBtn" id="reasonCancelBtn">取消</button>':''}
+      </div>
+    </div>
+    ${manageData.reasons.map(r => `
+      <div class="manageItem">
+        <span class="name">${esc(r.name)}</span>
+        <button class="smallBtn" data-edit-reason="${r.id}">編輯</button>
+        <button class="smallBtn danger" data-del-reason="${r.id}">刪除</button>
+      </div>`).join('')}
+  `;
+  $('reasonSaveBtn').onclick = async () => {
+    const name = $('reasonNameInput').value.trim(); if (!name) return;
+    if (editing) await updateDoc(doc(db,'reasons',editing.id), { name });
+    else await addDoc(collection(db,'reasons'), { name, order: manageData.reasons.length });
+    editingReasonId = null;
+    await loadManageData(); renderReasonTab(el);
+  };
+  if (editing) $('reasonCancelBtn').onclick = () => { editingReasonId = null; renderReasonTab(el); };
+  el.querySelectorAll('[data-edit-reason]').forEach(b => b.onclick = () => { editingReasonId = b.dataset.editReason; renderReasonTab(el); });
+  el.querySelectorAll('[data-del-reason]').forEach(b => b.onclick = async () => {
+    if (!confirm('刪除此原因？（以往記錄不受影響）')) return;
+    await deleteDoc(doc(db,'reasons',b.dataset.delReason));
+    if (editingReasonId === b.dataset.delReason) editingReasonId = null;
+    await loadManageData(); renderReasonTab(el);
+  });
+}
+
+/* 狀態 */
+function renderStatusTab(el) {
+  const editing = editingStatusId ? manageData.statuses.find(s=>s.id===editingStatusId) : null;
+  if (editing) selectedStatusType = editing.type;
+  const typeLabel = t => t==='transfer'?'轉介':t==='closed'?'完結':'普通';
+  el.innerHTML = `
+    <div class="manageItem" style="flex-direction:column;align-items:stretch;gap:8px">
+      <input id="statusNameInput" placeholder="狀態名稱" style="padding:10px;border:1px solid #d1d1d6;border-radius:8px" value="${esc(editing?.name||'')}">
+      <select id="statusTypeSelect" style="padding:10px;border:1px solid #d1d1d6;border-radius:8px">
+        <option value="normal" ${selectedStatusType==='normal'?'selected':''}>普通</option>
+        <option value="transfer" ${selectedStatusType==='transfer'?'selected':''}>轉介（需填轉介到）</option>
+        <option value="closed" ${selectedStatusType==='closed'?'selected':''}>完結（卡片變灰）</option>
+      </select>
+      <div style="display:flex;gap:8px">
+        <button class="smallBtn primary" id="statusSaveBtn">${editing?'更新':'新增'}</button>
+        ${editing?'<button class="smallBtn" id="statusCancelBtn">取消</button>':''}
+      </div>
+    </div>
+    ${manageData.statuses.map(s => `
+      <div class="manageItem">
+        <span class="name">${esc(s.name)} <span style="font-size:12px;color:#8e8e93">（${typeLabel(s.type)}）</span></span>
+        <button class="smallBtn" data-edit-status="${s.id}">編輯</button>
+        <button class="smallBtn danger" data-del-status="${s.id}">刪除</button>
+      </div>`).join('')}
+  `;
+  $('statusTypeSelect').onchange = e => selectedStatusType = e.target.value;
+  $('statusSaveBtn').onclick = async () => {
+    const name = $('statusNameInput').value.trim(); if (!name) return;
+    if (editing) await updateDoc(doc(db,'statuses',editing.id), { name, type: selectedStatusType });
+    else await addDoc(collection(db,'statuses'), { name, type: selectedStatusType, order: manageData.statuses.length });
+    editingStatusId = null; selectedStatusType = 'normal';
+    await loadManageData(); renderStatusTab(el);
+  };
+  if (editing) $('statusCancelBtn').onclick = () => { editingStatusId = null; selectedStatusType='normal'; renderStatusTab(el); };
+  el.querySelectorAll('[data-edit-status]').forEach(b => b.onclick = () => { editingStatusId = b.dataset.editStatus; renderStatusTab(el); });
+  el.querySelectorAll('[data-del-status]').forEach(b => b.onclick = async () => {
+    if (!confirm('刪除此狀態？（以往記錄不受影響）')) return;
+    await deleteDoc(doc(db,'statuses',b.dataset.delStatus));
+    if (editingStatusId === b.dataset.delStatus) editingStatusId = null;
+    await loadManageData(); renderStatusTab(el);
+  });
+}
+
+/* 管理員 */
+function renderAdminTab(el) {
+  el.innerHTML = `
+    <div class="manageItem" style="flex-direction:column;align-items:stretch;gap:8px">
+      <input id="adminIdInput" placeholder="7 位數字（0 開頭）" inputmode="numeric" style="padding:10px;border:1px solid #d1d1d6;border-radius:8px">
+      <button class="smallBtn primary" id="adminAddBtn">新增管理員</button>
+    </div>
+    ${manageData.admins.map(a => `
+      <div class="manageItem">
+        <span class="name">${esc(a.id)}</span>
+        <button class="smallBtn danger" data-del-admin="${esc(a.id)}">移除</button>
+      </div>`).join('')}
+  `;
+  $('adminAddBtn').onclick = async () => {
+    const id = $('adminIdInput').value.trim();
+    if (!/^0\d{6}$/.test(id)) { alert('請輸入 0 開頭的 7 位數字'); return; }
+    await setDoc(doc(db,'memo_admins',id), { createdAt: Date.now() });
+    await loadManageData(); renderAdminTab(el);
+  };
+  el.querySelectorAll('[data-del-admin]').forEach(b => b.onclick = async () => {
+    if (!confirm('移除此管理員？')) return;
+    await deleteDoc(doc(db,'memo_admins',b.dataset.delAdmin));
+    await loadManageData(); renderAdminTab(el);
+  });
+}
+
+/* ====== 回收箱 ====== */
+function openTrash() { $('trashView').style.display = 'flex'; renderTrash(); }
+function renderTrash() {
+  const list = memos.filter(m => m.deleted).sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
+  const el = $('trashBody');
+  if (list.length === 0) { el.innerHTML = '<div class="empty">回收箱是空的</div>'; return; }
+  el.innerHTML = list.map(m => `
+    <div class="trashItem">
+      <div><b>#${esc(m.no)}</b> ${esc(m.reason)} · ${esc(m.responsible)} · ${esc(m.currentStatus||'')}</div>
+      <div class="line">${esc(m.detail)}</div>
+      <div class="btns">
+        <button class="smallBtn" data-restore="${m.id}">還原</button>
+        <button class="smallBtn danger" data-purge="${m.id}">永久刪除</button>
+      </div>
+    </div>`).join('');
+  el.querySelectorAll('[data-restore]').forEach(b => b.onclick = async () => {
+    await updateDoc(doc(db,'memos',b.dataset.restore), { deleted: false });
+  });
+  el.querySelectorAll('[data-purge]').forEach(b => b.onclick = async () => {
+    if (!confirm('永久刪除後無法復原，確定？')) return;
+    await deleteDoc(doc(db,'memos',b.dataset.purge));
+  });
+}
+
+/* ====== 彈窗輔助 ====== */
+function showModal(id) { $(id).classList.add('show'); }
+function hideModal(id) { $(id).classList.remove('show'); }
+document.querySelectorAll('.modal').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('show'); });
+});
+</script>
+</body>
+</html>
