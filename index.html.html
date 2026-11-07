@@ -283,6 +283,21 @@ input,textarea,select{font-family:inherit;font-size:16px}
   </div>
 </div>
 
+<!-- 回收箱驗證彈窗 -->
+<div id="authTrashModal" class="modal">
+  <div class="sheet" style="max-height:auto">
+    <div class="sheetHead">
+      <button id="authTrashCancel" class="act plain">取消</button>
+      <h3>請輸入登入編號</h3>
+      <span style="width:50px"></span>
+    </div>
+    <div class="body" style="display:flex;justify-content:center;padding:20px">
+      <input id="authTrashInput" type="text" inputmode="numeric" autocomplete="off" 
+        style="width:200px;height:52px;font-size:22px;text-align:center;letter-spacing:8px;border:1px solid #d1d1d6;border-radius:14px;background:#fff;outline:none">
+    </div>
+  </div>
+</div>
+  
 <!-- 管理 -->
 <div id="manageView" class="fullView">
   <header>
@@ -349,6 +364,14 @@ let manageData = { responsibles: [], reasons: [], statuses: [], admins: [] };
 
 /* ====== 編號輸入處理 ====== */
 $('fNo').addEventListener('input', (e) => {
+  // 如果使用者是按退格鍵，就允許刪除，不強制補 0
+  if (e.inputType === 'deleteContentBackward') {
+    let val = e.target.value.replace(/\D/g, '');
+    e.target.value = val.slice(0, 8);
+    return;
+  }
+  
+  // 一般輸入時，自動補齊 8 位（實現從右到左取代）
   let val = e.target.value.replace(/\D/g, '');
   if (val.length > 8) val = val.slice(-8);
   e.target.value = val.padStart(8, '0');
@@ -535,12 +558,17 @@ function renderDetail() {
     : '';
   if (isAdmin) {
     $('detailEdit').onclick = () => { hideModal('detailModal'); openEditor(m); };
-    $('detailDelete').onclick = async () => {
+        $('detailDelete').onclick = async () => {
       if (!confirm('確定移到回收箱？')) return;
-      await updateDoc(doc(db,'memos',m.id), { deleted: true, deletedAt: Date.now() });
+      await updateDoc(doc(db,'memos',m.id), { 
+        deleted: true, 
+        deletedAt: Date.now(),
+        deletedBy: currentUser.loginId // 新增：紀錄刪除者
+      });
       hideModal('detailModal');
     };
   }
+  
   const hasRemind = m.reminderDate && !m.reminderDone;
   const reminderHtml = (m.reminderDate && !m.reminderDone) ? `
     <div class="reminderRow">
@@ -555,8 +583,16 @@ function renderDetail() {
       <div class="actionBtn ghost" id="btnReminder">📅 提醒日期</div>
     </div>` : '';
 
+  const deletedHtml = m.deleted ? `
+    <div class="detailRow" style="color:#ff3b30">
+      <div class="k">已刪除</div>
+      <div class="v">刪除者：${esc(m.deletedBy || '未知')} (${fmtTime(m.deletedAt)})</div>
+    </div>
+  ` : '';
+    
   $('detailBody').innerHTML = `
     <div class="formSection">
+    ${deletedHtml}
       <div class="detailRow"><div class="k">編號</div><div class="v">#${esc(m.no)}</div></div>
       <div class="detailRow"><div class="k">原因</div><div class="v">${esc(m.reason)}</div></div>
       <div class="detailRow"><div class="k">負責人</div><div class="v"><span class="dotInline" style="background:${esc(m.responsibleColor||'#eee')}"></span>${esc(m.responsible)}</div></div>
@@ -630,11 +666,17 @@ async function recalcMemoStatus(memoId) {
 /* ====== 新增/編輯 ====== */
 $('addBtn').addEventListener('click', () => openEditor(null));
 
-function fillSelect(sel, items, value) {
-  sel.innerHTML = '<option value="">請選擇</option>' +
-    items.map(i => `<option value="${esc(i)}" ${i===value?'selected':''}>${esc(i)}</option>`).join('');
+function sortNames(arr) {
+  return [...arr].sort((a, b) => String(a).localeCompare(String(b), 'zh-Hant'));
 }
 
+// 修改原本的 fillSelect
+function fillSelect(sel, items, value) {
+  const sortedItems = sortNames(items);
+  sel.innerHTML = '<option value="">請選擇</option>' +
+    sortedItems.map(i => `<option value="${esc(i)}" ${i===value?'selected':''}>${esc(i)}</option>`).join('');
+}
+  
 function openEditor(m) {
   editingMemoId = m ? m.id : null;
   $('editorTitle').textContent = m ? '編輯備忘' : '新增備忘';
@@ -673,15 +715,61 @@ $('editorSave').addEventListener('click', async () => {
         reminderDone: true // 管理員編輯 → 取消提醒
       });
     } else {
-      // 檢查重複編號
-      const dup = memos.find(m => m.no === no);
+      // 1. 檢查【主列表】是否有重複編號
+      const dup = memos.find(m => m.no === no && !m.deleted);
       if (dup) {
-        alert('編號重複，已為您跳轉至該備忘');
+        const statusName = $('fStatus').value;
+        if (!statusName) { alert('請選擇初始狀態'); return; }
+        const statusObj = statuses.find(s => s.name === statusName);
+        let transferTo = '';
+        if (statusObj?.type === 'transfer') {
+          transferTo = $('fTransfer').value.trim();
+          if (!transferTo) { alert('請填寫轉介到'); return; }
+        }
+
+        if (!confirm(`編號 #${no} 已存在。\n是否將當前填寫的詳細經過與狀態，作為一筆更新紀錄加入該備忘？`)) {
+          return; // ⬅️ 關鍵：如果取消，必須直接終止，不能繼續建新卡
+        }
+
+        const now = Date.now();
+        await addDoc(collection(db,'memos',dup.id,'updates'), {
+          content: detail,
+          status: statusName,
+          statusType: statusObj?.type || 'normal',
+          transferTo,
+          operator: currentUser.loginId,
+          createdAt: now,
+          deleted: false
+        });
+        await updateDoc(doc(db,'memos',dup.id), {
+          currentStatus: statusName,
+          currentStatusType: statusObj?.type || 'normal',
+          currentTransferTo: transferTo,
+          updatedAt: now,
+          reminderDone: true
+        });
+        
         hideModal('editorModal');
         openDetail(dup.id);
         return;
       }
 
+      // 2. 檢查【回收箱】是否有重複編號
+      const trashDups = memos.filter(m => m.no === no && m.deleted);
+      if (trashDups.length > 0) {
+        if (confirm(`編號 #${no} 在回收箱有 ${trashDups.length} 筆記錄。\n\n點擊「確定」：跳轉至回收箱查看，並決定是否復原。\n點擊「取消」：忽略回收箱記錄，直接建立一筆全新備忘。`)) {
+          hideModal('editorModal');
+          openManage().then(() => {
+            // 自動切換到回收箱並通過驗證
+            pendingManageTab = document.querySelector('#manageTabs button[data-tab="trash"]');
+            $('authTrashInput').value = currentUser.loginId;
+            verifyTrashAccess();
+          });
+          return;
+        }
+        // 如果按下取消，程式繼續往下執行，建立一筆全新的備忘
+      }
+      
       const statusName = $('fStatus').value;
       if (!statusName) { alert('請選擇初始狀態'); return; }
       const statusObj = statuses.find(s => s.name === statusName);
@@ -845,8 +933,8 @@ $('alertList').addEventListener('click', e => {
 $('menuBtn').addEventListener('click', () => {
   const isAdmin = currentUser?.isAdmin;
   $('menuBody').innerHTML = `
-    ${isAdmin ? '<button class="menuItem" data-action="manage">⚙️ 管理</button>' : ''}
-    <button class="menuItem danger" data-action="logout">🚪 登出</button>`;
+    ${isAdmin ? '<button class="menuItem" data-action="manage">⚙️  管理</button>' : ''}
+    <button class="menuItem danger" data-action="logout">🚪  登出</button>`;
   showModal('menuModal');
 });
 $('menuBody').addEventListener('click', async e => {
@@ -880,12 +968,50 @@ async function openManage() {
 document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click', () => {
   $('manageView').style.display = 'none';
 }));
+// 替換原本的 $('manageTabs').addEventListener
+let pendingManageTab = null;
+
 $('manageTabs').addEventListener('click', e => {
   const btn = e.target.closest('button[data-tab]'); if (!btn) return;
+  const tab = btn.dataset.tab;
+  
+  // 如果要切換到回收箱，且目前不是回收箱，則要求驗證
+  if (tab === 'trash' && currentManageTab !== 'trash') {
+    pendingManageTab = btn;
+    $('authTrashInput').value = '';
+    showModal('authTrashModal');
+    return;
+  }
+  
+  switchManageTab(btn);
+});
+
+function switchManageTab(btn) {
   currentManageTab = btn.dataset.tab;
   document.querySelectorAll('#manageTabs button').forEach(b => b.classList.toggle('active', b===btn));
   renderManage();
+}
+
+// 驗證回收箱
+$('authTrashCancel').addEventListener('click', () => hideModal('authTrashModal'));
+$('authTrashInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') verifyTrashAccess();
 });
+
+function verifyTrashAccess() {
+  const v = $('authTrashInput').value;
+  $('authTrashInput').value = ''; // 清空輸入框
+  if (!/^0\d{6}$/.test(v)) return; // 格式不對，不作任何提示
+  if (v === currentUser.loginId) {
+    hideModal('authTrashModal');
+    if (pendingManageTab) {
+      switchManageTab(pendingManageTab);
+      pendingManageTab = null;
+    }
+  }
+  // 密碼錯誤，同樣不作提示
+}
+  
 function renderManage() {
   const el = $('manageBody');
   if (currentManageTab === 'resp') renderRespTab(el);
@@ -1048,20 +1174,35 @@ function renderAdminTab(el) {
 function renderTrashTab(el) {
   const list = memos.filter(m => m.deleted).sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
   if (list.length === 0) { el.innerHTML = '<div class="empty">回收箱是空的</div>'; return; }
+  
   el.innerHTML = list.map(m => `
-    <div class="trashItem">
+    <div class="trashItem" style="cursor:pointer" data-view-trash="${m.id}">
       <div><b>#${esc(m.no)}</b> ${esc(m.reason)} · ${esc(m.responsible)} · ${esc(m.currentStatus||'')}</div>
       <div class="line">${esc(m.detail)}</div>
+      <div style="font-size:11px;color:#ff3b30;margin-top:4px">由 ${esc(m.deletedBy||'未知')} 於 ${fmtTime(m.deletedAt)} 刪除</div>
       <div class="btns">
-        <button class="smallBtn" data-restore="${m.id}">還原</button>
-        <button class="smallBtn danger" data-purge="${m.id}">永久刪除</button>
+        <button class="smallBtn" data-restore="${m.id}" onclick="event.stopPropagation()">還原</button>
+        <button class="smallBtn danger" data-purge="${m.id}" onclick="event.stopPropagation()">永久刪除</button>
       </div>
     </div>`).join('');
-  el.querySelectorAll('[data-restore]').forEach(b => b.onclick = async () => {
-    await updateDoc(doc(db,'memos',b.dataset.restore), { deleted: false });
+    
+  el.querySelectorAll('[data-view-trash]').forEach(item => item.onclick = (e) => {
+    if (e.target.closest('.smallBtn')) return;
+    openDetail(item.dataset.viewTrash);
+  });
+
+    el.querySelectorAll('[data-restore]').forEach(b => b.onclick = async (e) => {
+    e.stopPropagation();
+    // 還原時，將刪除標記與刪除者資訊清空
+    await updateDoc(doc(db,'memos',b.dataset.restore), { 
+      deleted: false, 
+      deletedAt: null, 
+      deletedBy: null 
+    });
     renderTrashTab(el);
   });
-  el.querySelectorAll('[data-purge]').forEach(b => b.onclick = async () => {
+  el.querySelectorAll('[data-purge]').forEach(b => b.onclick = async (e) => {
+    e.stopPropagation();
     if (!confirm('永久刪除後無法復原，確定？')) return;
     await deleteDoc(doc(db,'memos',b.dataset.purge));
     renderTrashTab(el);
