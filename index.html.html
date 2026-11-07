@@ -165,6 +165,7 @@ input,textarea,select{font-family:inherit;font-size:16px}
   #manageView header h2{font-size:18px}
 }
 </style>
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
 
@@ -299,7 +300,22 @@ input,textarea,select{font-family:inherit;font-size:16px}
     </div>
   </div>
 </div>
-  
+
+<!-- 分享截圖預覽彈窗 -->
+<div id="shareModal" class="modal">
+  <div class="sheet" style="max-height:95vh">
+    <div class="sheetHead">
+      <button id="shareClose" class="act plain">關閉</button>
+      <h3>分享圖片</h3>
+      <span style="width:50px"></span>
+    </div>
+    <div class="body" style="text-align:center; padding: 20px;">
+      <div style="font-size: 13px; color: #8e8e93; margin-bottom: 12px;">請長按下方圖片保存或分享</div>
+      <img id="shareImage" style="max-width:100%; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.1);" src="">
+    </div>
+  </div>
+</div>
+   
 <!-- 管理 -->
 <div id="manageView" class="fullView">
   <header>
@@ -606,11 +622,15 @@ function renderDetail() {
       ${m.reminderNote ? `<div class="r-note">${esc(m.reminderNote)}</div>` : ''}
     </div>` : '';
 
-  const actionHtml = isAdmin ? `
+    const actionHtml = isAdmin ? `
     <div class="actionRow">
       <div class="actionBtn" id="btnUpdate">＋ 更新</div>
       <div class="actionBtn ghost" id="btnReminder">📅 提醒日期</div>
-    </div>` : '';
+      <div class="actionBtn ghost" id="btnShare" style="flex:0 0 50px;">📤</div>
+    </div>` : `
+    <div class="actionRow">
+      <div class="actionBtn ghost" id="btnShare" style="flex:1;">📤 分享此備忘</div>
+    </div>`;
 
   const deletedHtml = m.deleted ? `
     <div class="detailRow" style="color:#ff3b30">
@@ -664,7 +684,10 @@ function renderDetail() {
       if (!confirm('清除提醒？')) return;
       await updateDoc(doc(db,'memos',m.id), { reminderDate: '', reminderNote: '', reminderDone: true });
     };
-    
+   }
+    if ($('btnShare')) {
+    $('btnShare').onclick = () => generateShareImage();
+    }
     // 編輯歷史紀錄
     $('detailBody').querySelectorAll('[data-edit-upd]').forEach(b => b.onclick = () => {
       const u = updates.find(x => x.id === b.dataset.editUpd);
@@ -700,6 +723,52 @@ $('detailClose').addEventListener('click', () => {
   updates = [];
 });
 
+async function generateShareImage() {
+  const sheet = document.querySelector('#detailModal .sheet');
+  const head = document.querySelector('#detailModal .sheetHead');
+  const actions = document.querySelector('#detailModal .actionRow'); // 操作按鈕列
+  
+  // 1. 截圖前隱藏不必要的按鈕，並展開滾動條
+  const originalDisplay = actions ? actions.style.display : '';
+  if (actions) actions.style.display = 'none';
+  if ($('btnUpdate')) $('btnUpdate').style.display = 'none'; // 雙重保險
+  
+  head.style.display = 'none'; // 隱藏頂部標題與關閉按鈕
+  
+  const originalOverflow = sheet.style.overflow;
+  const originalMaxHeight = sheet.style.maxHeight;
+  sheet.style.overflow = 'visible';
+  sheet.style.maxHeight = 'none'; // 讓所有歷史紀錄完全展開
+  sheet.style.borderRadius = '16px';
+  
+  try {
+    // 2. 呼叫 html2canvas 進行截圖
+    const canvas = await html2canvas(sheet, {
+      scale: 2, // 提高解析度
+      useCORS: true,
+      backgroundColor: '#f5f5f7',
+      scrollY: 0 // 避免手機端截圖位置偏移
+    });
+    
+    // 3. 將 Canvas 轉為圖片並顯示在彈窗
+    const imgData = canvas.toDataURL('image/png');
+    $('shareImage').src = imgData;
+    showModal('shareModal');
+    
+  } catch (err) {
+    console.error(err);
+    alert('生成圖片失敗，請重試');
+  } finally {
+    // 4. 恢復原本的畫面狀態
+    if (actions) actions.style.display = originalDisplay;
+    if ($('btnUpdate')) $('btnUpdate').style.display = '';
+    head.style.display = 'flex'; // sheetHead 原本是 flex
+    sheet.style.overflow = originalOverflow;
+    sheet.style.maxHeight = originalMaxHeight;
+    sheet.style.borderRadius = '16px 16px 0 0';
+  }
+}
+   
 /* ====== 更新狀態同步 ====== */
 async function recalcMemoStatus(memoId) {
   const memoRef = doc(db, 'memos', memoId);
@@ -1287,6 +1356,8 @@ function renderTrashTab(el) {
   });
 }
 
+$('shareClose').addEventListener('click', () => hideModal('shareModal'));
+   
 /* ====== 彈窗輔助 ====== */
 function showModal(id) { $(id).classList.add('show'); }
 function hideModal(id) { $(id).classList.remove('show'); }
