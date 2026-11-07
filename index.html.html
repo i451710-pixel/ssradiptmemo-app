@@ -510,12 +510,15 @@ function renderMemos() {
     const closed = m.currentStatusType === 'closed';
     const hasRemind = m.reminderDate && !m.reminderDone;
     
-    // 計算漸層背景
     let bgStyle = '#f0f0f0';
     if (closed) {
       bgStyle = '#e5e5ea';
     } else {
-      const colorSeq = m.colorSequence && m.colorSequence.length > 0 ? m.colorSequence : [m.responsibleColor || '#f0f0f0'];
+      // 👇 過濾掉無效的顏色，避免漸層壞掉
+      let colorSeq = m.colorSequence && m.colorSequence.length > 0 ? m.colorSequence : [m.responsibleColor || '#f0f0f0'];
+      colorSeq = colorSeq.filter(c => c && typeof c === 'string' && c.startsWith('#'));
+      if (colorSeq.length === 0) colorSeq = ['#f0f0f0'];
+
       if (colorSeq.length === 1) {
         bgStyle = colorSeq[0];
       } else {
@@ -540,6 +543,7 @@ function renderMemos() {
     </div>`;
   }).join('');
 }
+   
 $('memoList').addEventListener('click', e => {
   const card = e.target.closest('.card'); if (!card) return;
   openDetail(card.dataset.id);
@@ -785,7 +789,12 @@ async function recalcMemoStatus(memoId) {
     let colorSeq = [];
     let lastColor = null;
     validUpdates.forEach(u => {
-      const c = u.responsibleColor || '#f0f0f0';
+      // 👇 新增安全檢查：確保顏色是有效的 Hex 字串
+      let c = u.responsibleColor;
+      if (!c || typeof c !== 'string' || !c.startsWith('#')) {
+        c = '#f0f0f0'; 
+      }
+      
       if (c !== lastColor) {
         colorSeq.push(c);
         lastColor = c;
