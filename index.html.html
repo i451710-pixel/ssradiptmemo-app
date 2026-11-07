@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>備忘錄</title>
+   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='80' height='80' x='10' y='10' rx='20' fill='%23007aff'/><rect width='50' height='8' x='25' y='35' rx='4' fill='white'/><rect width='50' height='8' x='25' y='50' rx='4' fill='white'/><rect width='30' height='8' x='25' y='65' rx='4' fill='white'/></svg>">
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif;background:#f5f5f7;color:#1c1c1e}
@@ -228,6 +229,7 @@ input,textarea,select{font-family:inherit;font-size:16px}
       <div class="formSection"><label>最新跟進內容</label><textarea id="uContent" placeholder="輸入本次跟進內容…"></textarea></div>
       <div class="formSection"><label>狀態</label><select id="uStatus"></select></div>
       <div class="formSection" id="uTransferSection" style="display:none"><label>轉介到</label><input id="uTransfer" autocomplete="off"></div>
+      <div class="formSection"><label>負責人</label><select id="uResp"></select></div>
       <div style="font-size:12px;color:#8e8e93;padding:4px 4px">操作者：<span id="uOperator"></span>　時間自動記錄</div>
     </div>
   </div>
@@ -487,11 +489,31 @@ function renderMemos() {
   const list = getFilteredMemos();
   const el = $('memoList');
   if (list.length === 0) { el.innerHTML = '<div class="empty">沒有備忘</div>'; return; }
+  
   el.innerHTML = list.map(m => {
     const closed = m.currentStatusType === 'closed';
-    const bg = closed ? '#e5e5ea' : (m.responsibleColor || '#f0f0f0');
     const hasRemind = m.reminderDate && !m.reminderDone;
-    return `<div class="card ${closed?'closed':''}" data-id="${m.id}" style="background:${bg}">
+    
+    // 計算漸層背景
+    let bgStyle = '#f0f0f0';
+    if (closed) {
+      bgStyle = '#e5e5ea';
+    } else {
+      const colorSeq = m.colorSequence && m.colorSequence.length > 0 ? m.colorSequence : [m.responsibleColor || '#f0f0f0'];
+      if (colorSeq.length === 1) {
+        bgStyle = colorSeq[0];
+      } else {
+        const n = colorSeq.length;
+        const step = 100 / n;
+        let stops = [];
+        for (let i = 0; i < n; i++) {
+          stops.push(`${colorSeq[i]} ${i * step}%, ${colorSeq[i]} ${(i + 1) * step}%`);
+        }
+        bgStyle = `linear-gradient(to right, ${stops.join(', ')})`;
+      }
+    }
+
+    return `<div class="card ${closed?'closed':''}" data-id="${m.id}" style="background:${bgStyle}">
       <div class="card-top">
         <span class="no">#${esc(m.no)}</span>
         <span class="status">${esc(m.currentStatus||'')}</span>
@@ -526,7 +548,7 @@ function renderFilterBody() {
       ${items.map(v => `<button class="chip ${filterState[key]===v?'active':''}" data-f="${key}" data-v="${esc(v)}">${esc(v)}</button>`).join('')}
     </div></div>`;
   $('filterBody').innerHTML =
-    mk('負責人','resp', responsibles.map(r=>r.name)) +
+    mk('負責人','resp', responsibles.map(r=>r.displayName)) +  
     mk('原因','reason', reasons.map(r=>r.name)) +
     mk('狀態（依最新狀態）','status', statuses.map(s=>s.name));
 }
@@ -609,18 +631,30 @@ function renderDetail() {
     ${reminderHtml}
     ${actionHtml}
     <div class="historyTitle">更新歷史（${updates.length}）</div>
-    ${updates.map(u => `
+        ${updates.map(u => `
       <div class="historyItem ${u.deleted ? 'deleted' : ''}">
         <div class="h-top">
           <span class="h-status ${u.statusType==='closed'?'closed':u.statusType==='transfer'?'transfer':''}">${esc(u.status)}</span>
           <div style="display:flex;align-items:center;gap:8px">
             <span class="h-time">${fmtTime(u.createdAt)}</span>
-            ${isAdmin && !u.deleted ? `<button class="smallBtn" data-edit-upd="${u.id}">編輯</button><button class="smallBtn danger" data-del-upd="${u.id}">刪除</button>` : ''}
+            ${isAdmin ? (
+              u.deleted 
+              ? `<button class="smallBtn primary" data-restore-upd="${u.id}">恢復</button>` 
+              : `<button class="smallBtn" data-edit-upd="${u.id}">編輯</button><button class="smallBtn danger" data-del-upd="${u.id}">刪除</button>`
+            ) : ''}
           </div>
         </div>
         <div class="h-content">${esc(u.content)}</div>
         ${u.statusType==='transfer' && u.transferTo ? `<div class="h-transfer">轉介到：${esc(u.transferTo)}</div>` : ''}
-        <div class="h-operator">操作者：${esc(u.operator)}</div>
+        
+        <!-- 顯示負責人變更（舊負責人加橫線） -->
+        ${u.oldResponsible ? `<div class="h-transfer" style="color:#8e8e93">負責人：<span style="text-decoration:line-through">${esc(u.oldResponsible)}</span> ➔ ${esc(u.responsible)}</div>` : ''}
+        
+        <!-- 顯示刪除者資訊或操作者 -->
+        ${u.deleted 
+          ? `<div class="h-operator" style="color:#ff3b30">由 ${esc(u.deletedBy||'未知')} 於 ${fmtTime(u.deletedAt)} 刪除</div>` 
+          : `<div class="h-operator">操作者：${esc(u.operator)}</div>`
+        }
       </div>`).join('')}
   `;
   if (isAdmin) {
@@ -637,14 +671,29 @@ function renderDetail() {
       if (u) openUpdateModal(m, u);
     });
     
-    // 刪除歷史紀錄
+    // 刪除歷史紀錄（加上刪除人記錄）
     $('detailBody').querySelectorAll('[data-del-upd]').forEach(b => b.onclick = async () => {
       if (!confirm('確定刪除此筆更新紀錄？（將以橫線標示）')) return;
-      await updateDoc(doc(db,'memos',m.id,'updates',b.dataset.delUpd), { deleted: true });
+      await updateDoc(doc(db,'memos',m.id,'updates',b.dataset.delUpd), { 
+        deleted: true,
+        deletedBy: currentUser.loginId,
+        deletedAt: Date.now()
+      });
+      await recalcMemoStatus(m.id);
+    });
+
+    // 恢復歷史紀錄 (新增)
+    $('detailBody').querySelectorAll('[data-restore-upd]').forEach(b => b.onclick = async () => {
+      await updateDoc(doc(db,'memos',m.id,'updates',b.dataset.restoreUpd), { 
+        deleted: false,
+        deletedBy: null,
+        deletedAt: null
+      });
       await recalcMemoStatus(m.id);
     });
   }
 }
+    
 $('detailClose').addEventListener('click', () => {
   hideModal('detailModal');
   if (detailUnsub) { detailUnsub(); detailUnsub = null; }
@@ -653,23 +702,40 @@ $('detailClose').addEventListener('click', () => {
 
 /* ====== 更新狀態同步 ====== */
 async function recalcMemoStatus(memoId) {
+  const memoRef = doc(db, 'memos', memoId);
   const snap = await getDocs(collection(db,'memos',memoId,'updates'));
-  const validUpdates = snap.docs
+  
+  const allUpdates = snap.docs
     .map(d => ({id: d.id, ...d.data()}))
-    .filter(u => !u.deleted)
-    .sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+    .sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+    
+  const validUpdates = allUpdates.filter(u => !u.deleted);
   
   if (validUpdates.length > 0) {
-    const latest = validUpdates[0];
-    await updateDoc(doc(db,'memos',memoId), {
+    const latest = validUpdates[validUpdates.length - 1];
+    
+    let colorSeq = [];
+    let lastColor = null;
+    validUpdates.forEach(u => {
+      const c = u.responsibleColor || '#f0f0f0';
+      if (c !== lastColor) {
+        colorSeq.push(c);
+        lastColor = c;
+      }
+    });
+    if (colorSeq.length === 0) colorSeq = ['#f0f0f0'];
+
+    await updateDoc(memoRef, {
       currentStatus: latest.status,
       currentStatusType: latest.statusType || 'normal',
       currentTransferTo: latest.transferTo || '',
+      responsible: latest.responsible || '未知',
+      responsibleColor: latest.responsibleColor || '#f0f0f0',
+      colorSequence: colorSeq,
       updatedAt: latest.createdAt
     });
   }
 }
-
 /* ====== 新增/編輯 ====== */
 $('addBtn').addEventListener('click', () => openEditor(null));
 
@@ -715,6 +781,7 @@ $('editorSave').addEventListener('click', async () => {
 
   try {
     if (editingMemoId) {
+      // 編輯主卡片
       await updateDoc(doc(db,'memos',editingMemoId), {
         no, reason, responsible, detail,
         responsibleColor: respObj?.color || '#f0f0f0',
@@ -735,27 +802,16 @@ $('editorSave').addEventListener('click', async () => {
         }
 
         if (!confirm(`編號 #${no} 已存在。\n是否將當前填寫的詳細經過與狀態，作為一筆更新紀錄加入該備忘？`)) {
-          return; // ⬅️ 關鍵：如果取消，必須直接終止，不能繼續建新卡
+          return; 
         }
 
         const now = Date.now();
         await addDoc(collection(db,'memos',dup.id,'updates'), {
-          content: detail,
-          status: statusName,
-          statusType: statusObj?.type || 'normal',
-          transferTo,
-          operator: currentUser.loginId,
-          createdAt: now,
-          deleted: false
+          content: detail, status: statusName, statusType: statusObj?.type || 'normal', transferTo,
+          responsible: responsible, responsibleColor: respObj?.color || '#f0f0f0',
+          operator: currentUser.loginId, createdAt: now, deleted: false
         });
-        await updateDoc(doc(db,'memos',dup.id), {
-          currentStatus: statusName,
-          currentStatusType: statusObj?.type || 'normal',
-          currentTransferTo: transferTo,
-          updatedAt: now,
-          reminderDone: true
-        });
-        
+        await recalcMemoStatus(dup.id);
         hideModal('editorModal');
         openDetail(dup.id);
         return;
@@ -764,19 +820,18 @@ $('editorSave').addEventListener('click', async () => {
       // 2. 檢查【回收箱】是否有重複編號
       const trashDups = memos.filter(m => m.no === no && m.deleted);
       if (trashDups.length > 0) {
-        if (confirm(`編號 #${no} 在回收箱有 ${trashDups.length} 筆記錄。\n\n點擊「確定」：跳轉至回收箱查看，並決定是否復原。\n點擊「取消」：忽略回收箱記錄，直接建立一筆全新備忘。`)) {
+        if (confirm(`編號 #${no} 在回收箱有 ${trashDups.length} 筆記錄。\n\n點擊「確定」：跳轉至回收箱查看。\n點擊「取消」：忽略，直接建立全新備忘。`)) {
           hideModal('editorModal');
           openManage().then(() => {
-            // 自動切換到回收箱並通過驗證
             pendingManageTab = document.querySelector('#manageTabs button[data-tab="trash"]');
             $('authTrashInput').value = currentUser.loginId;
             verifyTrashAccess();
           });
           return;
         }
-        // 如果按下取消，程式繼續往下執行，建立一筆全新的備忘
       }
       
+      // 3. 建立全新備忘
       const statusName = $('fStatus').value;
       if (!statusName) { alert('請選擇初始狀態'); return; }
       const statusObj = statuses.find(s => s.name === statusName);
@@ -789,6 +844,7 @@ $('editorSave').addEventListener('click', async () => {
       const memoRef = await addDoc(collection(db,'memos'), {
         no, reason, responsible,
         responsibleColor: respObj?.color || '#f0f0f0',
+        colorSequence: [respObj?.color || '#f0f0f0'], 
         detail,
         currentStatus: statusName,
         currentStatusType: statusObj?.type || 'normal',
@@ -799,13 +855,9 @@ $('editorSave').addEventListener('click', async () => {
       });
       // 第一條 update
       await addDoc(collection(db,'memos',memoRef.id,'updates'), {
-        content: detail,
-        status: statusName,
-        statusType: statusObj?.type || 'normal',
-        transferTo,
-        operator: currentUser.loginId,
-        createdAt: now,
-        deleted: false
+        content: detail, status: statusName, statusType: statusObj?.type || 'normal', transferTo,
+        responsible: responsible, responsibleColor: respObj?.color || '#f0f0f0',
+        operator: currentUser.loginId, createdAt: now, deleted: false
       });
     }
     hideModal('editorModal');
@@ -818,12 +870,14 @@ function openUpdateModal(m, u = null) {
     $('updateTitle').textContent = '修改更新';
     $('uContent').value = u.content || '';
     fillSelect($('uStatus'), statuses.map(s=>s.name), u.status);
+    fillSelect($('uResp'), responsibles.map(r=>r.displayName), u.responsible || m.responsible); // 新增
     $('uTransfer').value = u.transferTo || '';
     $('updateModal').dataset.updateId = u.id;
   } else {
     $('updateTitle').textContent = '新增更新';
     $('uContent').value = '';
     fillSelect($('uStatus'), statuses.map(s=>s.name), '');
+    fillSelect($('uResp'), responsibles.map(r=>r.displayName), m.responsible); // 新增，預設為當前負責人
     $('uTransfer').value = '';
     $('updateModal').dataset.updateId = '';
   }
@@ -840,15 +894,24 @@ $('updateSave').addEventListener('click', async () => {
   const updateId = $('updateModal').dataset.updateId;
   const content = $('uContent').value.trim();
   const statusName = $('uStatus').value;
+  const respName = $('uResp').value; // 獲取選擇的負責人
+  
   if (!content) { alert('請填寫跟進內容'); return; }
   if (!statusName) { alert('請選擇狀態'); return; }
+  if (!respName) { alert('請選擇負責人'); return; }
+  
   const statusObj = statuses.find(s => s.name === statusName);
+  const respObj = responsibles.find(r => r.displayName === respName);
   let transferTo = '';
   if (statusObj?.type === 'transfer') {
     transferTo = $('uTransfer').value.trim();
     if (!transferTo) { alert('請填寫轉介到'); return; }
   }
+  
+  const m = memos.find(x => x.id === memoId);
+  const isChanged = m.responsible !== respName; // 檢查是否更改了負責人
   const now = Date.now();
+  
   try {
     if (updateId) {
       // 編輯既有的更新
@@ -856,6 +919,8 @@ $('updateSave').addEventListener('click', async () => {
         content, status: statusName,
         statusType: statusObj?.type || 'normal',
         transferTo,
+        responsible: respName, // 更新負責人
+        responsibleColor: respObj?.color || '#f0f0f0',
         updatedAt: now
       });
       await recalcMemoStatus(memoId);
@@ -865,17 +930,14 @@ $('updateSave').addEventListener('click', async () => {
         content, status: statusName,
         statusType: statusObj?.type || 'normal',
         transferTo,
+        responsible: respName, // 記錄此次的負責人
+        responsibleColor: respObj?.color || '#f0f0f0',
+        oldResponsible: isChanged ? m.responsible : null, // 如果有變更，記錄舊負責人
         operator: currentUser.loginId,
         createdAt: now,
         deleted: false
       });
-      await updateDoc(doc(db,'memos',memoId), {
-        currentStatus: statusName,
-        currentStatusType: statusObj?.type || 'normal',
-        currentTransferTo: transferTo,
-        updatedAt: now,
-        reminderDone: true
-      });
+      await recalcMemoStatus(memoId);
     }
     hideModal('updateModal');
   } catch (e) { alert('儲存失敗：' + e.message); }
