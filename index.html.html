@@ -288,7 +288,7 @@ input,textarea,select{font-family:inherit;font-size:16px}
   <div class="sheet" style="max-height:auto">
     <div class="sheetHead">
       <button id="authTrashCancel" class="act plain">取消</button>
-      <h3>請輸入登入編號</h3>
+      <h3>輸入</h3>
       <span style="width:50px"></span>
     </div>
     <div class="body" style="display:flex;justify-content:center;padding:20px">
@@ -444,7 +444,14 @@ function startListeners() {
     checkReminders();
   }));
   unsubs.push(onSnapshot(collection(db,'responsibles'), snap => {
-    responsibles = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0));
+    responsibles = snap.docs.map(d=>{
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        displayName: data.dept ? `${data.dept} ${data.name}` : data.name
+      };
+    }).sort((a,b)=>(a.order||0)-(b.order||0));
     renderActiveFilters();
   }));
   unsubs.push(onSnapshot(collection(db,'reasons'), snap => {
@@ -681,7 +688,7 @@ function openEditor(m) {
   editingMemoId = m ? m.id : null;
   $('editorTitle').textContent = m ? '編輯備忘' : '新增備忘';
   fillSelect($('fReason'), reasons.map(r=>r.name), m?.reason);
-  fillSelect($('fResp'), responsibles.map(r=>r.name), m?.responsible);
+  fillSelect($('fResp'), responsibles.map(r=>r.displayName), m?.responsible);
   fillSelect($('fStatus'), statuses.map(s=>s.name), m?.currentStatus);
   $('fNo').value = m?.no || '00000000';
   $('fDetail').value = m?.detail || '';
@@ -704,7 +711,7 @@ $('editorSave').addEventListener('click', async () => {
   const responsible = $('fResp').value;
   const detail = $('fDetail').value.trim();
   if (!no || !reason || !responsible || !detail) { alert('請填寫必填欄位'); return; }
-  const respObj = responsibles.find(r => r.name === responsible);
+  const respObj = responsibles.find(r => r.displayName === responsible);
 
   try {
     if (editingMemoId) {
@@ -953,7 +960,14 @@ async function loadManageData() {
     getDocs(collection(db,'statuses')),
     getDocs(collection(db,'memo_admins'))
   ]);
-  manageData.responsibles = r.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0));
+    manageData.responsibles = r.docs.map(d=>{
+    const data = d.data();
+    return {
+      id: d.id,
+      ...data,
+      displayName: data.dept ? `${data.dept} ${data.name}` : data.name
+    };
+  }).sort((a,b)=>(a.order||0)-(b.order||0));
   manageData.reasons = re.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0));
   manageData.statuses = s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0));
   manageData.admins = a.docs.map(d=>({id:d.id,...d.data()}));
@@ -1027,6 +1041,7 @@ function renderRespTab(el) {
   if (editing) selectedRespColor = editing.color;
   el.innerHTML = `
     <div class="manageItem" style="flex-direction:column;align-items:stretch;gap:8px">
+      <input id="respDeptInput" placeholder="部門（選填，例如：工程部）" style="padding:10px;border:1px solid #d1d1d6;border-radius:8px" value="${esc(editing?.dept||'')}">
       <input id="respNameInput" placeholder="負責人名稱" style="padding:10px;border:1px solid #d1d1d6;border-radius:8px" value="${esc(editing?.name||'')}">
       <div class="palette" id="respPalette">
         ${COLORS.map(c=>`<button data-color="${c}" class="${c===selectedRespColor?'selected':''}" style="background:${c}"></button>`).join('')}
@@ -1039,7 +1054,7 @@ function renderRespTab(el) {
     ${manageData.responsibles.map(r => `
       <div class="manageItem">
         <span class="colorDot" style="background:${esc(r.color)}"></span>
-        <span class="name">${esc(r.name)}</span>
+        <span class="name">${esc(r.displayName)}</span>
         <button class="smallBtn" data-edit-resp="${r.id}">編輯</button>
         <button class="smallBtn danger" data-del-resp="${r.id}">刪除</button>
       </div>`).join('')}
@@ -1050,9 +1065,10 @@ function renderRespTab(el) {
     $('respPalette').querySelectorAll('button').forEach(x => x.classList.toggle('selected', x===b));
   };
   $('respSaveBtn').onclick = async () => {
+    const dept = $('respDeptInput').value.trim();
     const name = $('respNameInput').value.trim(); if (!name) return;
-    if (editing) await updateDoc(doc(db,'responsibles',editing.id), { name, color: selectedRespColor });
-    else await addDoc(collection(db,'responsibles'), { name, color: selectedRespColor, order: manageData.responsibles.length });
+    if (editing) await updateDoc(doc(db,'responsibles',editing.id), { dept, name, color: selectedRespColor });
+    else await addDoc(collection(db,'responsibles'), { dept, name, color: selectedRespColor, order: manageData.responsibles.length });
     editingRespId = null; selectedRespColor = COLORS[0];
     await loadManageData(); renderRespTab(el);
   };
