@@ -586,6 +586,39 @@ function renderMemos() {
   openDetail(card.dataset.id);
 });
 
+$('searchInput').addEventListener('input', () => {
+  filterState.search = $('searchInput').value.trim();
+  renderMemos(); renderActiveFilters();
+});
+
+$('filterBtn').addEventListener('click', () => { 
+  renderFilterBody(); 
+  showModal('filterModal'); 
+});
+
+$('filterDone').addEventListener('click', () => hideModal('filterModal'));
+
+$('filterClear').addEventListener('click', () => {
+  filterState.resp = ''; filterState.reason = ''; filterState.status = '';
+  renderFilterBody(); renderMemos(); renderActiveFilters();
+});
+
+$('menuBtn').addEventListener('click', () => {
+  const isAdmin = currentUser?.isAdmin;
+  $('menuBody').innerHTML = `
+    ${isAdmin ? '<button class="menuItem" data-action="manage">⚙️  管理</button>' : ''}
+    <button class="menuItem danger" data-action="logout">🚪  登出</button>`;
+  showModal('menuModal');
+});
+
+$('menuBody').addEventListener('click', async e => {
+  const btn = e.target.closest('.menuItem'); if (!btn) return;
+  hideModal('menuModal');
+  const a = btn.dataset.action;
+  if (a === 'manage') openManage();
+  else if (a === 'logout') { stopListeners(); await signOut(auth); }
+});
+   
 function renderFilterBody() {
   const mk = (title, key, items) => `
     <div class="filterGroup"><h4>${title}</h4><div class="filterChips">
