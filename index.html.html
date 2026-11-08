@@ -365,7 +365,8 @@ input,textarea,select{font-family:inherit;font-size:16px}
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import {
   getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  onAuthStateChanged, signOut
+  onAuthStateChanged, signOut,
+  setPersistence, inMemoryPersistence 
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, addDoc, updateDoc, deleteDoc,
@@ -439,9 +440,13 @@ function tryLogin() {
 async function doLogin(id) {
   const email = `${id}@${EMAIL_DOMAIN}`;
   try {
+    await setPersistence(auth, inMemoryPersistence);
     await signInWithEmailAndPassword(auth, email, id);
   } catch (e) {
-    try { await createUserWithEmailAndPassword(auth, email, id); }
+    try {
+      await setPersistence(auth, inMemoryPersistence);
+      await createUserWithEmailAndPassword(auth, email, id);
+    }
     catch (e2) { /* 靜默 */ }
   }
 }
@@ -576,6 +581,10 @@ function renderMemos() {
     </div>`;
   }).join('');
 }
+   $('memoList').addEventListener('click', e => {
+  const card = e.target.closest('.card'); if (!card) return;
+  openDetail(card.dataset.id);
+});
 
 function renderFilterBody() {
   const mk = (title, key, items) => `
@@ -700,24 +709,21 @@ function renderDetail() {
         }
       </div>`).join('')}
   `;
-  if (isAdmin) {
+    if (isAdmin) {
     $('btnUpdate').onclick = () => openUpdateModal(m);
     $('btnReminder').onclick = () => openReminderModal(m);
     if ($('reminderClear')) $('reminderClear').onclick = async () => {
       if (!confirm('清除提醒？')) return;
       await updateDoc(doc(db,'memos',m.id), { reminderDate: '', reminderNote: '', reminderDone: true });
     };
-   }
-    if ($('btnShare')) {
-    $('btnShare').onclick = () => generateShareImage();
-    }
+    
     // 編輯歷史紀錄
     $('detailBody').querySelectorAll('[data-edit-upd]').forEach(b => b.onclick = () => {
       const u = updates.find(x => x.id === b.dataset.editUpd);
       if (u) openUpdateModal(m, u);
     });
     
-    // 刪除歷史紀錄（加上刪除人記錄）
+    // 刪除歷史紀錄
     $('detailBody').querySelectorAll('[data-del-upd]').forEach(b => b.onclick = async () => {
       if (!confirm('確定刪除此筆更新紀錄？（將以橫線標示）')) return;
       await updateDoc(doc(db,'memos',m.id,'updates',b.dataset.delUpd), { 
@@ -728,7 +734,7 @@ function renderDetail() {
       await recalcMemoStatus(m.id);
     });
 
-    // 恢復歷史紀錄 (新增)
+    // 恢復歷史紀錄
     $('detailBody').querySelectorAll('[data-restore-upd]').forEach(b => b.onclick = async () => {
       await updateDoc(doc(db,'memos',m.id,'updates',b.dataset.restoreUpd), { 
         deleted: false,
@@ -737,14 +743,18 @@ function renderDetail() {
       });
       await recalcMemoStatus(m.id);
     });
+  } 
+  if ($('btnShare')) {
+    $('btnShare').onclick = () => generateShareImage();
   }
-    
+
+} 
+
 $('detailClose').addEventListener('click', () => {
   hideModal('detailModal');
   if (detailUnsub) { detailUnsub(); detailUnsub = null; }
   updates = [];
 });
-
 async function generateShareImage() {
   const sheet = document.querySelector('#detailModal .sheet');
   const head = document.querySelector('#detailModal .sheetHead');
