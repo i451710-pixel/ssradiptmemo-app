@@ -30,12 +30,41 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .card{border-radius:14px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer;position:relative}
 .card.closed{background:#e5e5ea!important}
 .card.closed *{color:#8e8e93!important}
-.card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-.card-top .no{font-weight:700;font-size:15px}
-.card-top .status{font-size:12px;padding:2px 8px;border-radius:10px;background:rgba(0,0,0,.08)}
-.card-reason{font-size:14px;margin-bottom:3px;font-weight:500}
-.card-resp{font-size:13px;opacity:.85}
-.card-remind{position:absolute;top:10px;right:10px;font-size:14px}
+/* 列表 */
+#memoList{padding:0 12px;display:flex;flex-direction:column;gap:12px}
+.card{
+  border-radius:16px;
+  padding:16px;
+  box-shadow:0 4px 12px rgba(0,0,0,.06);
+  cursor:pointer;
+  position:relative;
+  color:#1c1c1e; /* 強制文字為深色，避免深色模式看不清 */
+  transition:transform .15s ease;
+}
+.card:active{ transform:scale(.98); }
+.card.closed{background:#e5e5ea!important; color:#8e8e93!important;}
+.card.closed *{color:#8e8e93!important;}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.card-top .no{font-weight:700;font-size:16px}
+.card-top-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+
+/* 狀態標籤 */
+.card-top .status{
+  font-size:11px;padding:4px 10px;border-radius:12px;
+  background:rgba(255,255,255,0.6); /* 半透明白底，在所有色塊上都清楚 */
+  color:#1c1c1e; font-weight:600;
+}
+.card-top .status.closed{
+  background:rgba(0,0,0,0.05); color:#8e8e93;
+}
+.card-remind{ font-size:16px; }
+.card-reason{font-size:15px;margin-bottom:4px;font-weight:600}
+.card-resp{font-size:13px;opacity:.8}
+.card-transfer{
+  display:inline-block; margin-top:10px; font-size:12px; font-weight:600;
+  color:#c77700; background:rgba(255,255,255,0.7);
+  padding:4px 10px; border-radius:8px;
+}
 
 /* FAB */
 #addBtn{position:fixed;right:18px;bottom:24px;width:56px;height:56px;border-radius:28px;background:#007aff;color:#fff;font-size:28px;box-shadow:0 4px 12px rgba(0,122,255,.4);display:none;align-items:center;justify-content:center;z-index:20}
@@ -508,13 +537,14 @@ function renderMemos() {
   
   el.innerHTML = list.map(m => {
     const closed = m.currentStatusType === 'closed';
+    const isTransfer = m.currentStatusType === 'transfer';
     const hasRemind = m.reminderDate && !m.reminderDone;
     
+    // 計算漸層背景
     let bgStyle = '#f0f0f0';
     if (closed) {
       bgStyle = '#e5e5ea';
     } else {
-      // 👇 過濾掉無效的顏色，避免漸層壞掉
       let colorSeq = m.colorSequence && m.colorSequence.length > 0 ? m.colorSequence : [m.responsibleColor || '#f0f0f0'];
       colorSeq = colorSeq.filter(c => c && typeof c === 'string' && c.startsWith('#'));
       if (colorSeq.length === 0) colorSeq = ['#f0f0f0'];
@@ -531,35 +561,21 @@ function renderMemos() {
         bgStyle = `linear-gradient(to right, ${stops.join(', ')})`;
       }
     }
-
     return `<div class="card ${closed?'closed':''}" data-id="${m.id}" style="background:${bgStyle}">
       <div class="card-top">
         <span class="no">#${esc(m.no)}</span>
-        <span class="status">${esc(m.currentStatus||'')}</span>
+        <div class="card-top-right">
+          ${hasRemind ? '<span class="card-remind">🔔</span>' : ''}
+          <span class="status ${closed?'closed':isTransfer?'transfer':''}">${esc(m.currentStatus||'')}</span>
+        </div>
       </div>
       <div class="card-reason">${esc(m.reason)}</div>
       <div class="card-resp">負責人：${esc(m.responsible)}</div>
-      ${hasRemind ? '<span class="card-remind">🔔</span>' : ''}
+      <!-- 加上這段：如果有轉介內容，就顯示出來 -->
+      ${isTransfer && m.currentTransferTo ? `<div class="card-transfer">➔ 轉介至：${esc(m.currentTransferTo)}</div>` : ''}
     </div>`;
   }).join('');
 }
-   
-$('memoList').addEventListener('click', e => {
-  const card = e.target.closest('.card'); if (!card) return;
-  openDetail(card.dataset.id);
-});
-
-/* ====== 搜尋 / 篩選 ====== */
-$('searchInput').addEventListener('input', () => {
-  filterState.search = $('searchInput').value.trim();
-  renderMemos(); renderActiveFilters();
-});
-$('filterBtn').addEventListener('click', () => { renderFilterBody(); showModal('filterModal'); });
-$('filterDone').addEventListener('click', () => hideModal('filterModal'));
-$('filterClear').addEventListener('click', () => {
-  filterState.resp = ''; filterState.reason = ''; filterState.status = '';
-  renderFilterBody(); renderMemos(); renderActiveFilters();
-});
 
 function renderFilterBody() {
   const mk = (title, key, items) => `
@@ -643,17 +659,20 @@ function renderDetail() {
     </div>
   ` : '';
     
-  $('detailBody').innerHTML = `
+    $('detailBody').innerHTML = `
     <div class="formSection">
     ${deletedHtml}
       <div class="detailRow"><div class="k">編號</div><div class="v">#${esc(m.no)}</div></div>
       <div class="detailRow"><div class="k">原因</div><div class="v">${esc(m.reason)}</div></div>
       <div class="detailRow"><div class="k">負責人</div><div class="v"><span class="dotInline" style="background:${esc(m.responsibleColor||'#eee')}"></span>${esc(m.responsible)}</div></div>
+      ${m.currentStatusType === 'transfer' && m.currentTransferTo ? `<div class="detailRow"><div class="k">轉介至</div><div class="v" style="color:#c77700;font-weight:600;background:#fff3e0;display:inline-block;padding:4px 8px;border-radius:6px;">${esc(m.currentTransferTo)}</div></div>` : ''}
+      
       <div class="detailRow"><div class="k">詳細經過</div><div class="v">${esc(m.detail)}</div></div>
       <div class="detailRow"><div class="k">建立時間</div><div class="v">${fmtTime(m.createdAt)}</div></div>
     </div>
     ${reminderHtml}
     ${actionHtml}
+   
     <div class="historyTitle">更新歷史（${updates.length}）</div>
         ${updates.map(u => `
       <div class="historyItem ${u.deleted ? 'deleted' : ''}">
