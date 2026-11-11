@@ -724,9 +724,15 @@ function renderDetail() {
     ${actionHtml}
    
     <div class="historyTitle">更新歷史（${updates.length}）</div>
-        ${updates.map(u => {
-          // 編輯/刪除：管理員或該筆紀錄的建立者本人
-          const canEditU = isAdmin || (u.operator && u.operator === currentUser?.loginId);
+                ${updates.map(u => {
+          // 權限判斷：管理員，或該筆紀錄的建立者本人
+          // 使用 String() 寬鬆比對，防止數字與字串型別不一致導致判斷失敗
+          const canEditU = isAdmin || (u.operator && String(u.operator) === String(currentUser?.loginId));
+          const canDeleteU = isAdmin; // 刪除僅限管理員
+          
+          // 如果你想確認比對是否成功，可以取消下面這行的註解來測試
+          // console.log('比對結果:', u.operator, currentUser?.loginId, canEditU);
+
           return `
       <div class="historyItem ${u.deleted ? 'deleted' : ''}">
         <div class="h-top">
@@ -735,7 +741,10 @@ function renderDetail() {
             <span class="h-time">${fmtTime(u.createdAt)}</span>
             ${u.deleted
               ? (isAdmin ? `<button class="smallBtn primary" data-restore-upd="${u.id}">恢復</button>` : '')
-              : (canEditU ? `<button class="smallBtn" data-edit-upd="${u.id}">編輯</button><button class="smallBtn danger" data-del-upd="${u.id}">刪除</button>` : '')
+              : `
+                ${canEditU ? `<button class="smallBtn" data-edit-upd="${u.id}">編輯</button>` : ''}
+                ${canDeleteU ? `<button class="smallBtn danger" data-del-upd="${u.id}">刪除</button>` : ''}
+              `
             }
           </div>
         </div>
