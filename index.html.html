@@ -461,7 +461,8 @@ onAuthStateChanged(auth, async (user) => {
     startListeners();
     $('loginView').style.display = 'none';
     $('appView').style.display = 'block';
-    $('addBtn').style.display = isAdmin ? 'flex' : 'none';
+    // 所有登入用戶都可新增備忘
+    $('addBtn').style.display = 'flex';
   } else {
     currentUser = null;
     stopListeners();
@@ -660,12 +661,17 @@ function renderDetail() {
   const m = memos.find(x => x.id === detailMemoId);
   if (!m) { hideModal('detailModal'); return; }
   const isAdmin = currentUser?.isAdmin;
+
+  // 編輯：所有登入用戶都可；刪除：僅管理員
   $('detailActions').innerHTML = isAdmin
     ? `<button class="act" id="detailEdit">編輯</button><button class="act danger" id="detailDelete">刪除</button>`
-    : '';
-  if (isAdmin) {
+    : `<button class="act" id="detailEdit">編輯</button>`;
+
+  if ($('detailEdit')) {
     $('detailEdit').onclick = () => { hideModal('detailModal'); openEditor(m); };
-        $('detailDelete').onclick = async () => {
+  }
+  if (isAdmin && $('detailDelete')) {
+    $('detailDelete').onclick = async () => {
       if (!confirm('確定移到回收箱？')) return;
       await updateDoc(doc(db,'memos',m.id), { 
         deleted: true, 
@@ -684,14 +690,16 @@ function renderDetail() {
       ${m.reminderNote ? `<div class="r-note">${esc(m.reminderNote)}</div>` : ''}
     </div>` : '';
 
-    const actionHtml = isAdmin ? `
+  // 更新：所有登入用戶都可；提醒日期：僅管理員
+  const actionHtml = isAdmin ? `
     <div class="actionRow">
       <div class="actionBtn" id="btnUpdate">＋ 更新</div>
       <div class="actionBtn ghost" id="btnReminder">📅 提醒日期</div>
       <div class="actionBtn ghost" id="btnShare" style="flex:0 0 50px;">📤</div>
     </div>` : `
     <div class="actionRow">
-      <div class="actionBtn ghost" id="btnShare" style="flex:1;">📤 分享此備忘</div>
+      <div class="actionBtn" id="btnUpdate">＋ 更新</div>
+      <div class="actionBtn ghost" id="btnShare" style="flex:0 0 50px;">📤</div>
     </div>`;
 
   const deletedHtml = m.deleted ? `
@@ -716,17 +724,19 @@ function renderDetail() {
     ${actionHtml}
    
     <div class="historyTitle">更新歷史（${updates.length}）</div>
-        ${updates.map(u => `
+        ${updates.map(u => {
+          // 編輯/刪除：管理員或該筆紀錄的建立者本人
+          const canEditU = isAdmin || (u.operator && u.operator === currentUser?.loginId);
+          return `
       <div class="historyItem ${u.deleted ? 'deleted' : ''}">
         <div class="h-top">
           <span class="h-status ${u.statusType==='closed'?'closed':u.statusType==='transfer'?'transfer':''}">${esc(u.status)}</span>
           <div style="display:flex;align-items:center;gap:8px">
             <span class="h-time">${fmtTime(u.createdAt)}</span>
-            ${isAdmin ? (
-              u.deleted 
-              ? `<button class="smallBtn primary" data-restore-upd="${u.id}">恢復</button>` 
-              : `<button class="smallBtn" data-edit-upd="${u.id}">編輯</button><button class="smallBtn danger" data-del-upd="${u.id}">刪除</button>`
-            ) : ''}
+            ${u.deleted
+              ? (isAdmin ? `<button class="smallBtn primary" data-restore-upd="${u.id}">恢復</button>` : '')
+              : (canEditU ? `<button class="smallBtn" data-edit-upd="${u.id}">編輯</button><button class="smallBtn danger" data-del-upd="${u.id}">刪除</button>` : '')
+            }
           </div>
         </div>
         <div class="h-content">${esc(u.content)}</div>
@@ -740,47 +750,52 @@ function renderDetail() {
           ? `<div class="h-operator" style="color:#ff3b30">由 ${esc(u.deletedBy||'未知')} 於 ${fmtTime(u.deletedAt)} 刪除</div>` 
           : `<div class="h-operator">操作者：${esc(u.operator)}</div>`
         }
-      </div>`).join('')}
+      </div>`;
+        }).join('')}
   `;
-    if (isAdmin) {
-    $('btnUpdate').onclick = () => openUpdateModal(m);
-    $('btnReminder').onclick = () => openReminderModal(m);
+
+  // 更新按鈕：所有人
+  if ($('btnUpdate')) $('btnUpdate').onclick = () => openUpdateModal(m);
+
+  // 提醒相關：僅管理員
+  if (isAdmin) {
+    if ($('btnReminder')) $('btnReminder').onclick = () => openReminderModal(m);
     if ($('reminderClear')) $('reminderClear').onclick = async () => {
       if (!confirm('清除提醒？')) return;
       await updateDoc(doc(db,'memos',m.id), { reminderDate: '', reminderNote: '', reminderDone: true });
     };
-    
-    // 編輯歷史紀錄
-    $('detailBody').querySelectorAll('[data-edit-upd]').forEach(b => b.onclick = () => {
-      const u = updates.find(x => x.id === b.dataset.editUpd);
-      if (u) openUpdateModal(m, u);
-    });
-    
-    // 刪除歷史紀錄
-    $('detailBody').querySelectorAll('[data-del-upd]').forEach(b => b.onclick = async () => {
-      if (!confirm('確定刪除此筆更新紀錄？（將以橫線標示）')) return;
-      await updateDoc(doc(db,'memos',m.id,'updates',b.dataset.delUpd), { 
-        deleted: true,
-        deletedBy: currentUser.loginId,
-        deletedAt: Date.now()
-      });
-      await recalcMemoStatus(m.id);
-    });
+  }
 
-    // 恢復歷史紀錄
-    $('detailBody').querySelectorAll('[data-restore-upd]').forEach(b => b.onclick = async () => {
-      await updateDoc(doc(db,'memos',m.id,'updates',b.dataset.restoreUpd), { 
-        deleted: false,
-        deletedBy: null,
-        deletedAt: null
-      });
-      await recalcMemoStatus(m.id);
+  // 編輯歷史紀錄
+  $('detailBody').querySelectorAll('[data-edit-upd]').forEach(b => b.onclick = () => {
+    const u = updates.find(x => x.id === b.dataset.editUpd);
+    if (u) openUpdateModal(m, u);
+  });
+  
+  // 刪除歷史紀錄
+  $('detailBody').querySelectorAll('[data-del-upd]').forEach(b => b.onclick = async () => {
+    if (!confirm('確定刪除此筆更新紀錄？（將以橫線標示）')) return;
+    await updateDoc(doc(db,'memos',m.id,'updates',b.dataset.delUpd), { 
+      deleted: true,
+      deletedBy: currentUser.loginId,
+      deletedAt: Date.now()
     });
-  } 
+    await recalcMemoStatus(m.id);
+  });
+
+  // 恢復歷史紀錄（僅管理員）
+  $('detailBody').querySelectorAll('[data-restore-upd]').forEach(b => b.onclick = async () => {
+    await updateDoc(doc(db,'memos',m.id,'updates',b.dataset.restoreUpd), { 
+      deleted: false,
+      deletedBy: null,
+      deletedAt: null
+    });
+    await recalcMemoStatus(m.id);
+  });
+
   if ($('btnShare')) {
     $('btnShare').onclick = () => generateShareImage();
   }
-
 } 
 
 $('detailClose').addEventListener('click', () => {
@@ -920,13 +935,15 @@ $('editorSave').addEventListener('click', async () => {
 
   try {
     if (editingMemoId) {
-      // 編輯主卡片
-      await updateDoc(doc(db,'memos',editingMemoId), {
+      // 編輯主卡片（所有登入用戶皆可）
+      const patch = {
         no, reason, responsible, detail,
         responsibleColor: respObj?.color || '#f0f0f0',
-        updatedAt: Date.now(),
-        reminderDone: true // 管理員編輯 → 取消提醒
-      });
+        updatedAt: Date.now()
+      };
+      // 只有管理員編輯時才取消提醒
+      if (currentUser?.isAdmin) patch.reminderDone = true;
+      await updateDoc(doc(db,'memos',editingMemoId), patch);
     } else {
       // 1. 檢查【主列表】是否有重複編號
       const dup = memos.find(m => m.no === no && !m.deleted);
@@ -948,6 +965,7 @@ $('editorSave').addEventListener('click', async () => {
         await addDoc(collection(db,'memos',dup.id,'updates'), {
           content: detail, status: statusName, statusType: statusObj?.type || 'normal', transferTo,
           responsible: responsible, responsibleColor: respObj?.color || '#f0f0f0',
+          oldResponsible: dup.responsible !== responsible ? dup.responsible : null,
           operator: currentUser.loginId, createdAt: now, deleted: false
         });
         await recalcMemoStatus(dup.id);
@@ -990,6 +1008,7 @@ $('editorSave').addEventListener('click', async () => {
         currentTransferTo: transferTo,
         createdAt: now, updatedAt: now,
         deleted: false,
+        createdBy: currentUser.loginId,
         reminderDate: '', reminderNote: '', reminderDone: true
       });
       // 第一條 update
